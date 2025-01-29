@@ -25,7 +25,7 @@ func composeRoutes(app *application) http.Handler {
 	mux.HandleFunc("DELETE /v1/tasks/{id}", app.requireAuthenticatedUser(requireActivatedUser(app.deleteTaskHandler)))
 
 	if app.config.limiter.enabled {
-		return app.enableCORS(app.rateLimit(mux))
+		return recoverFromPanic(app.enableCORS(app.rateLimit(mux)))
 	}
-	return app.enableCORS(mux)
+	return recoverFromPanic(app.enableCORS(mux))
 }

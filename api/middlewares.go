@@ -159,6 +159,19 @@ func (app *application) enableCORS(next http.Handler) http.HandlerFunc {
 	}
 }
 
+func recoverFromPanic(next http.Handler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if err := recover(); err != nil {
+				log.Println(err)
+				w.Header().Set("Connection", "close")
+				writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
+			}
+		}()
+		next.ServeHTTP(w, r)
+	}
+}
+
 type userContext string
 
 const userContextKey userContext = "userContextKey"

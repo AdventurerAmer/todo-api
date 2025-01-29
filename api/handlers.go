@@ -34,6 +34,7 @@ func (app *application) healthCheckHandler(w http.ResponseWriter, r *http.Reques
 }
 
 func (app *application) createUserHandler(w http.ResponseWriter, r *http.Request) {
+
 	var input struct {
 		Name     string `json:"name"`
 		Email    string `json:"email"`

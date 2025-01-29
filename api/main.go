@@ -1,14 +1,18 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -122,7 +126,32 @@ func main() {
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 30 * time.Second,
 	}
+
+	shutDownCh := make(chan error)
+
+	go func() {
+		sig := make(chan os.Signal, 1)
+		signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+		<-sig
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		err := srv.Shutdown(ctx)
+		shutDownCh <- err
+	}()
+
 	log.Printf("Starting %s server on port %d\n", cfg.env, cfg.port)
+
 	err = srv.ListenAndServe()
-	log.Fatal(err)
+	if !errors.Is(err, http.ErrServerClosed) {
+		log.Fatal(err)
+	}
+
+	err = <-shutDownCh
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.Println("server stopped")
 }
