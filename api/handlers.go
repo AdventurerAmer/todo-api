@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -13,6 +14,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/AdventurerAmer/todo-api/internal/core/ports"
 	"github.com/golang-jwt/jwt/v4"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -34,106 +36,29 @@ func (app *application) healthCheckHandler(w http.ResponseWriter, r *http.Reques
 }
 
 func (app *application) createUserHandler(w http.ResponseWriter, r *http.Request) {
-
-	var input struct {
-		Name     string `json:"name"`
-		Email    string `json:"email"`
-		Password string `json:"password"`
-	}
-
-	err := json.NewDecoder(r.Body).Decode(&input)
-	if err != nil {
+	var req ports.CreateUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, err, http.StatusBadRequest)
 		return
 	}
 
-	v := newValidator()
-	v.checkCond(input.Name != "", "name", "must be provided")
-	v.checkCond(len(input.Name) <= 255, "name", "must be atmost 255 characters")
-	v.checkEmail(input.Email)
-	v.checkPassword(input.Password)
-	if v.hasErrors() {
-		writeError(w, v.toError(), http.StatusBadRequest)
-		return
-	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
 
-	u, err := app.storage.getUserByEmail(input.Email)
+	resp, err := app.usersService.Create(ctx, req)
 	if err != nil {
-		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
-		return
-	}
-
-	if u != nil {
-		writeError(w, errors.New("user already exists"), http.StatusConflict)
-		return
-	}
-
-	passwordHash, err := bcrypt.GenerateFromPassword([]byte(input.Password), 13)
-	if err != nil {
-		log.Println(err)
-		writeError(w, err, http.StatusConflict)
-		return
-	}
-
-	u = &user{
-		Name:         input.Name,
-		Email:        input.Email,
-		PasswordHash: passwordHash,
-	}
-	err = app.storage.insertUser(u)
-	if err != nil {
-		log.Println(err)
+		// TODO: get status code from error
 		writeError(w, err, http.StatusInternalServerError)
 		return
 	}
 
-	tmpl, err := template.ParseFS(templates, "templates/*.gotmpl")
-	if err != nil {
-		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
-		return
-	}
-	code := uint16(rand.Uint())
-	err = app.mailer.send(u.Email, tmpl, map[string]any{"code": code})
-	if err != nil {
-		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
-		return
-	}
-	app.storage.useractivationCache.Set(u, code, time.Minute)
-	writeJSON(w, map[string]any{"user": u, "message": fmt.Sprintf("we have sent an activation code to your email: %s", u.Email)}, http.StatusCreated)
+	writeJSON(w, resp, http.StatusCreated)
 }
 
 func (app *application) updateUserHandler(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		Name     string `json:"name"`
-		Email    string `json:"email"`
-		Password string `json:"password"`
-	}
-
-	err := json.NewDecoder(r.Body).Decode(&input)
-	if err != nil {
+	var req ports.UpdateUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, err, http.StatusBadRequest)
-		return
-	}
-
-	v := newValidator()
-
-	if input.Name != "" {
-		v.checkCond(input.Name != "", "name", "must be provided")
-		v.checkCond(len(input.Name) <= 255, "name", "must be atmost 255 characters")
-	}
-
-	if input.Email != "" {
-		v.checkEmail(input.Email)
-	}
-
-	if input.Password != "" {
-		v.checkPassword(input.Password)
-	}
-
-	v.checkCond(input.Name != "" || input.Email != "" || input.Password != "", "name or email or password", "atleast one must be provided")
-
-	if v.hasErrors() {
-		writeError(w, v.toError(), http.StatusBadRequest)
 		return
 	}
 
@@ -143,42 +68,16 @@ func (app *application) updateUserHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	u, err := app.storage.getUserByEmail(input.Email)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	resp, err := app.usersService.Update(ctx, user, req)
 	if err != nil {
 		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
 		return
 	}
 
-	if u != nil {
-		writeError(w, errors.New("email is already in use"), http.StatusConflict)
-		return
-	}
-
-	if input.Name != "" {
-		user.Name = input.Name
-	}
-
-	if input.Email != "" {
-		user.Email = input.Email
-	}
-
-	if input.Password != "" {
-		passwordHash, err := bcrypt.GenerateFromPassword([]byte(input.Password), 13)
-		if err != nil {
-			log.Println(err)
-			writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
-			return
-		}
-		user.PasswordHash = passwordHash
-	}
-
-	err = app.storage.updateUser(user)
-	if err != nil {
-		log.Println(err)
-		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
-		return
-	}
-	writeJSON(w, map[string]any{"user": user}, http.StatusOK)
+	writeJSON(w, resp, http.StatusOK)
 }
 
 func (app *application) getUserHandler(w http.ResponseWriter, r *http.Request) {
@@ -197,13 +96,16 @@ func (app *application) deleteUserHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	err := app.storage.deleteUser(user)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	req := ports.DeleteUserRequest{ID: user.ID}
+	resp, err := app.usersService.Delete(ctx, req)
 	if err != nil {
-		log.Println(err)
 		writeError(w, err, http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, map[string]any{"message": "user successfully deleted"}, http.StatusOK)
+	writeJSON(w, resp, http.StatusOK)
 }
 
 func (app *application) createTaskHandler(w http.ResponseWriter, r *http.Request) {
@@ -419,18 +321,23 @@ func (app *application) deleteTaskHandler(w http.ResponseWriter, r *http.Request
 }
 
 func (app *application) sendActivationCodeHandler(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.Atoi(r.PathValue("id"))
-	if err != nil || id < -1 {
-		writeError(w, errors.New("route paramter {id}: must to be a positive integer"), http.StatusBadRequest)
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, errors.New("validation error: id is empty"), http.StatusBadRequest)
 		return
 	}
 
-	u, err := app.storage.getUserByID(id)
+	// TODO: hardcoding
+	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	defer cancel()
+
+	resp, err := app.usersService.Get(ctx, ports.GetUserRequest{ID: id})
 	if err != nil {
 		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
 		return
 	}
 
+	u := resp.User
 	if u.IsActivated {
 		writeJSON(w, map[string]any{"message": "user already activated"}, http.StatusConflict)
 		return
@@ -455,9 +362,9 @@ func (app *application) sendActivationCodeHandler(w http.ResponseWriter, r *http
 }
 
 func (app *application) activateUserHandler(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.Atoi(r.PathValue("id"))
-	if err != nil || id < -1 {
-		writeError(w, errors.New("route paramter {id}: must to be a positive integer"), http.StatusBadRequest)
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, errors.New("route paramter {id}: must not be empty"), http.StatusBadRequest)
 		return
 	}
 
@@ -465,8 +372,7 @@ func (app *application) activateUserHandler(w http.ResponseWriter, r *http.Reque
 		Code *int `json:"code"`
 	}
 
-	err = json.NewDecoder(r.Body).Decode(&input)
-	if err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
 		return
 	}
@@ -476,11 +382,16 @@ func (app *application) activateUserHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	u, err := app.storage.getUserByID(id)
+	// TODO: hardcoding
+	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	defer cancel()
+
+	getUserResp, err := app.usersService.Get(ctx, ports.GetUserRequest{ID: id})
 	if err != nil {
 		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
 		return
 	}
+	u := getUserResp.User
 	if u.IsActivated {
 		writeJSON(w, map[string]any{"message": "user already activated"}, http.StatusConflict)
 		return
@@ -495,13 +406,11 @@ func (app *application) activateUserHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	u.IsActivated = true
-	err = app.storage.updateUser(u)
-	if err != nil {
-		log.Println(err)
+	if err := app.usersRepo.Update(ctx, u); err != nil {
 		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, map[string]any{"user": u}, http.StatusOK)
+	writeJSON(w, map[string]any{"message": "user was updated successfully"}, http.StatusOK)
 }
 
 func (app *application) authenticateUserHandler(w http.ResponseWriter, r *http.Request) {
@@ -524,20 +433,17 @@ func (app *application) authenticateUserHandler(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	u, err := app.storage.getUserByEmail(input.Email)
+	// TODO: hardcoding
+	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	defer cancel()
+
+	u, err := app.usersRepo.GetByEmail(ctx, input.Email)
 	if err != nil {
-		log.Println(err)
 		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
 		return
 	}
 
-	if u == nil {
-		writeError(w, errors.New("email or password are not correct"), http.StatusUnauthorized)
-		return
-	}
-
-	err = bcrypt.CompareHashAndPassword(u.PasswordHash, []byte(input.Password))
-	if err != nil {
+	if err := bcrypt.CompareHashAndPassword(u.PasswordHash, []byte(input.Password)); err != nil {
 		writeError(w, errors.New("email or password are not correct"), http.StatusUnauthorized)
 		return
 	}

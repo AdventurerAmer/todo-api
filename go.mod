@@ -1,14 +1,14 @@
-module github.com/harlequingg/todo-restful-api
+module github.com/AdventurerAmer/todo-api
 
-go 1.23.2
+go 1.25.0
 
 require (
 	github.com/go-mail/mail/v2 v2.3.0
 	github.com/golang-jwt/jwt v3.2.2+incompatible
-	github.com/golang-jwt/jwt/v4 v4.5.1
-	github.com/lib/pq v1.10.9
-	golang.org/x/crypto v0.32.0
-	golang.org/x/time v0.9.0
+	github.com/golang-jwt/jwt/v4 v4.5.2
+	github.com/lib/pq v1.12.0
+	golang.org/x/crypto v0.49.0
+	golang.org/x/time v0.15.0
 )
 
 require (

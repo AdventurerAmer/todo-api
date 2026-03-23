@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/AdventurerAmer/todo-api/internal/core/domain"
+	"github.com/AdventurerAmer/todo-api/internal/core/ports"
 	"github.com/golang-jwt/jwt"
 	"golang.org/x/time/rate"
 )
@@ -46,11 +48,10 @@ func (app *application) requireAuthenticatedUser(next http.HandlerFunc) http.Han
 			writeError(w, errors.New("invalid token"), http.StatusUnauthorized)
 			return
 		}
-		userID := int(claims["user_id"].(float64))
+		userID := claims["user_id"].(string)
 		expiresAtStr := claims["expires_at"].(string)
 		expiresAt, err := time.Parse(time.RFC822, expiresAtStr)
 		if err != nil {
-			log.Println(err)
 			writeError(w, errors.New("invalid token"), http.StatusUnauthorized)
 			return
 		}
@@ -59,17 +60,23 @@ func (app *application) requireAuthenticatedUser(next http.HandlerFunc) http.Han
 			writeError(w, errors.New("invalid token"), http.StatusUnauthorized)
 			return
 		}
-		u, err := app.storage.getUserByID(userID)
+
+		// TODO: hardcoding
+		dctx, cancel := context.WithTimeout(r.Context(), time.Second)
+		defer cancel()
+
+		resp, err := app.usersService.Get(dctx, ports.GetUserRequest{ID: userID})
 		if err != nil {
 			log.Println(err)
 			writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
 			return
 		}
-		if u == nil {
+		user := resp.User
+		if user == nil {
 			writeError(w, errors.New("user no longer exists"), http.StatusUnauthorized)
 			return
 		}
-		ctx := context.WithValue(r.Context(), userContextKey, u)
+		ctx := context.WithValue(r.Context(), userContextKey, user)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -176,7 +183,7 @@ type userContext string
 
 const userContextKey userContext = "userContextKey"
 
-func getUserFromRequest(r *http.Request) *user {
-	u, _ := r.Context().Value(userContextKey).(*user)
+func getUserFromRequest(r *http.Request) *domain.User {
+	u, _ := r.Context().Value(userContextKey).(*domain.User)
 	return u
 }

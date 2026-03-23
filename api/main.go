@@ -15,6 +15,11 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/AdventurerAmer/todo-api/internal/core/ports"
+	"github.com/AdventurerAmer/todo-api/internal/core/services/userssrv"
+	"github.com/AdventurerAmer/todo-api/internal/repositories/usersrepo"
+	"github.com/AdventurerAmer/todo-api/internal/utils"
 )
 
 const version = "1.0.0"
@@ -49,9 +54,11 @@ type config struct {
 }
 
 type application struct {
-	config  config
-	storage *storage
-	mailer  *mailer
+	config       config
+	storage      *storage
+	mailer       *mailer
+	usersRepo    ports.UsersRepository // TODO: remove this from here.
+	usersService ports.UsersService
 }
 
 func main() {
@@ -114,10 +121,17 @@ func main() {
 		cfg.jwt.secret = string(secret)
 	}
 
+	mailer :=
+		utils.NewMailer(cfg.smtp.host, cfg.smtp.port, cfg.smtp.username, cfg.smtp.password, cfg.smtp.sender)
+
+	usersRepo := usersrepo.NewPostgres(db)
+	usersService := userssrv.New(usersRepo, templates, mailer, userssrv.DefaultConfig())
+
 	app := &application{
-		config:  cfg,
-		storage: newStorage(db),
-		mailer:  newMailer(cfg.smtp.host, cfg.smtp.port, cfg.smtp.username, cfg.smtp.password, cfg.smtp.sender),
+		config:       cfg,
+		storage:      newStorage(db),
+		mailer:       newMailer(cfg.smtp.host, cfg.smtp.port, cfg.smtp.username, cfg.smtp.password, cfg.smtp.sender),
+		usersService: usersService,
 	}
 
 	tlsConfig := &tls.Config{
