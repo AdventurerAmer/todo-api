@@ -1,9 +1,9 @@
 package utils
 
 import (
-	"encoding/json"
-	"errors"
+	"fmt"
 	"regexp"
+	"unicode/utf8"
 )
 
 var emailRegexp = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
@@ -18,22 +18,14 @@ func NewValidator() *Validator {
 	}
 }
 
-func (v *Validator) ToError() error {
-	if v == nil {
-		return errors.New("")
+func (v *Validator) Errs() map[string]string {
+	if len(v.errors) == 0 {
+		return nil
 	}
-	data, err := json.Marshal(v.errors)
-	if err != nil {
-		return err
-	}
-	return errors.New(string(data))
+	return v.errors
 }
 
-func (v *Validator) HasErrors() bool {
-	return len(v.errors) != 0
-}
-
-func (v *Validator) CheckCond(cond bool, key, msg string) {
+func (v *Validator) Check(cond bool, key, msg string) {
 	if cond {
 		return
 	}
@@ -42,13 +34,35 @@ func (v *Validator) CheckCond(cond bool, key, msg string) {
 	}
 }
 
-func (v *Validator) CheckEmail(email string) {
-	v.CheckCond(email != "", "email", "must be provided")
-	v.CheckCond(emailRegexp.Match([]byte(email)), "email", "must be a valid email address")
+func (v *Validator) CheckNotEmpty(key string, val string) {
+	v.Check(val != "", "key", "must not be empty")
 }
 
-func (v *Validator) CheckPassword(password string) {
-	v.CheckCond(password != "", "password", "must be provided")
-	v.CheckCond(len(password) >= 8, "password", "must be atleast 8 characters long")
-	v.CheckCond(len(password) <= 72, "password", "must be atmost 72 characters long")
+func (v *Validator) CheckUTF8(key string, val string) {
+	v.Check(utf8.ValidString(val), key, "must be a valid utf8")
+}
+
+func (v *Validator) CheckRangeInc(key string, val int, min int, max int) {
+	v.Check(val < min || val > max, key, fmt.Sprintf("must be between %d and %d both inclusive", min, max))
+}
+
+func (v *Validator) CheckAtMostInc(key string, val int, max int, unit string) {
+	v.Check(val <= max, key, fmt.Sprintf("must be at most %d %s", max, unit))
+}
+
+func (v *Validator) CheckAtLeastInc(key string, val int, min int, unit string) {
+	v.Check(val >= min, key, fmt.Sprintf("must be at least %d %s", min, unit))
+}
+
+func (v *Validator) CheckUTF8Email(email string) {
+	v.CheckNotEmpty("email", email)
+	v.CheckUTF8("email", email)
+	v.CheckAtMostInc("email", utf8.RuneCountInString(email), 320, "characters long")
+	v.Check(emailRegexp.MatchString(email), "email", "must be a valid")
+}
+
+func (v *Validator) CheckUTF8Password(password string) {
+	v.Check(password != "", "password", "must be provided")
+	v.CheckUTF8("password", password)
+	v.CheckRangeInc("password", utf8.RuneCountInString(password), 8, 72)
 }

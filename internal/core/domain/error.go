@@ -33,3 +33,11 @@ func (r *ResourceAlreadyExistsError) Is(target error) bool {
 	}
 	return r.Name == t.Name
 }
+
+type ValidationsError struct {
+	Errors map[string]string `json:"errors"`
+}
+
+func (v *ValidationsError) Error() string {
+	return fmt.Sprintf("validation failed: %+v", v.Errors)
+}

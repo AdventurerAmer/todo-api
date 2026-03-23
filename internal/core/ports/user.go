@@ -44,7 +44,7 @@ type GetUserResponse struct {
 }
 
 type UpdateUserRequest struct {
-	Name string `json:"name"`
+	Name *string `json:"name"`
 }
 
 type UpdateUserResponse struct {
