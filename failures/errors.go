@@ -1,4 +1,4 @@
-package domain
+package failures
 
 import "fmt"
 
@@ -39,5 +39,5 @@ type ValidationsError struct {
 }
 
 func (v *ValidationsError) Error() string {
-	return fmt.Sprintf("validation failed: %+v", v.Errors)
+	return fmt.Sprintf("%+v", v.Errors)
 }

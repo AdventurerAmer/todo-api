@@ -1,4 +1,4 @@
-package utils
+package failures
 
 import (
 	"fmt"
@@ -18,11 +18,11 @@ func NewValidator() *Validator {
 	}
 }
 
-func (v *Validator) Errs() map[string]string {
+func (v *Validator) Err() error {
 	if len(v.errors) == 0 {
 		return nil
 	}
-	return v.errors
+	return &ValidationsError{Errors: v.errors}
 }
 
 func (v *Validator) Check(cond bool, key, msg string) {

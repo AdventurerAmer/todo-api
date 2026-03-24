@@ -8,6 +8,7 @@ import (
 	"math/rand/v2"
 	"unicode/utf8"
 
+	"github.com/AdventurerAmer/todo-api/failures"
 	"github.com/AdventurerAmer/todo-api/internal/core/domain"
 	"github.com/AdventurerAmer/todo-api/internal/core/ports"
 	"github.com/AdventurerAmer/todo-api/internal/utils"
@@ -41,12 +42,12 @@ func New(usersRepo ports.UsersRepository, templates embed.FS, mailer *utils.Mail
 }
 
 func (srv *service) Create(ctx context.Context, req ports.CreateUserRequest) (ports.CreateUserResponse, error) {
-	v := utils.NewValidator()
+	v := failures.NewValidator()
 	srv.validateName(v, req.Name)
 	v.CheckUTF8Email(req.Email)
 	v.CheckUTF8Password(req.Password)
-	if errs := v.Errs(); errs != nil {
-		return ports.CreateUserResponse{}, &domain.ValidationsError{Errors: errs}
+	if err := v.Err(); err != nil {
+		return ports.CreateUserResponse{}, fmt.Errorf("validation failed: %w", err)
 	}
 
 	if _, err := srv.usersRepo.GetByEmail(ctx, req.Email); err != nil {
@@ -85,10 +86,10 @@ func (srv *service) Create(ctx context.Context, req ports.CreateUserRequest) (po
 }
 
 func (srv *service) Get(ctx context.Context, req ports.GetUserRequest) (ports.GetUserResponse, error) {
-	v := utils.NewValidator()
+	v := failures.NewValidator()
 	v.Check(req.ID != "", "id", "must not be empty")
-	if errs := v.Errs(); errs != nil {
-		return ports.GetUserResponse{}, &domain.ValidationsError{Errors: errs}
+	if err := v.Err(); err != nil {
+		return ports.GetUserResponse{}, fmt.Errorf("validation failed: %w", err)
 	}
 	user, err := srv.usersRepo.Get(ctx, req.ID)
 	if err != nil {
@@ -101,14 +102,14 @@ func (srv *service) Get(ctx context.Context, req ports.GetUserRequest) (ports.Ge
 }
 
 func (srv *service) Update(ctx context.Context, user *domain.User, req ports.UpdateUserRequest) (ports.UpdateUserResponse, error) {
-	v := utils.NewValidator()
+	v := failures.NewValidator()
 
 	if req.Name != nil {
 		srv.validateName(v, *req.Name)
 	}
 
-	if errs := v.Errs(); errs != nil {
-		return ports.UpdateUserResponse{}, &domain.ValidationsError{Errors: errs}
+	if err := v.Err(); err != nil {
+		return ports.UpdateUserResponse{}, fmt.Errorf("validation failed: %w", err)
 	}
 
 	if req.Name != nil {
@@ -132,7 +133,7 @@ func (srv *service) Delete(ctx context.Context, req ports.DeleteUserRequest) (po
 	return ports.DeleteUserResponse{Message: "user was deleted successfully"}, nil
 }
 
-func (srv *service) validateName(v *utils.Validator, name string) {
+func (srv *service) validateName(v *failures.Validator, name string) {
 	v.Check(name != "", "name", "must be provided")
 	v.CheckUTF8("name", name)
 	v.CheckAtMostInc("name", utf8.RuneCountInString(name), srv.NameMaxChars, "characters long")

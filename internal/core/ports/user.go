@@ -3,11 +3,12 @@ package ports
 import (
 	"context"
 
+	"github.com/AdventurerAmer/todo-api/failures"
 	"github.com/AdventurerAmer/todo-api/internal/core/domain"
 )
 
-var ErrUserNotFound = &domain.ResourceNotFoundError{Name: "user"}
-var ErrUserAlreadyExists = &domain.ResourceAlreadyExistsError{Name: "user"}
+var ErrUserNotFound = &failures.ResourceNotFoundError{Name: "user"}
+var ErrUserAlreadyExists = &failures.ResourceAlreadyExistsError{Name: "user"}
 
 type UsersRepository interface {
 	Create(context.Context, *domain.User) error
