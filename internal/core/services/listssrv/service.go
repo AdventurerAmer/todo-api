@@ -15,6 +15,13 @@ type Config struct {
 	DescriptionMaxChars int
 }
 
+func DefaultConfig() Config {
+	return Config{
+		TitleMaxChars:       1024,
+		DescriptionMaxChars: 2048,
+	}
+}
+
 type service struct {
 	Config
 	listsRepo ports.ListsRepository

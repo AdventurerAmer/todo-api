@@ -1,4 +1,4 @@
-package listssrv
+package taskssrv
 
 import (
 	"context"
@@ -12,6 +12,12 @@ import (
 
 type Config struct {
 	ContentMaxChars int
+}
+
+func DefaultConfig() Config {
+	return Config{
+		ContentMaxChars: 1024,
+	}
 }
 
 type service struct {

@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -14,6 +14,7 @@ import (
 )
 
 func openDB(cfg config) (*sql.DB, error) {
+	log.Println(cfg.db.dsn)
 	db, err := sql.Open("postgres", cfg.db.dsn)
 	if err != nil {
 		return nil, err
@@ -26,8 +27,7 @@ func openDB(cfg config) (*sql.DB, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err = db.PingContext(ctx)
-	if err != nil {
+	if err := db.PingContext(ctx); err != nil {
 		return nil, err
 	}
 
@@ -110,40 +110,6 @@ func newStorage(db *sql.DB) *storage {
 	}
 }
 
-func (s *storage) insertTask(u *domain.User, t *task) error {
-	query := `INSERT INTO tasks (user_id, content, is_completed)
-			  VALUES ($1, $2, $3)
-			  RETURNING id, created_at, version`
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	err := s.db.QueryRowContext(ctx, query, u.ID, t.Content, t.IsCompleted).Scan(&t.ID, &t.CreatedAt, &t.Version)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (s *storage) getTaskByID(id int) (*task, error) {
-	query := `SELECT created_at, user_id, content, is_completed, version
-			  FROM tasks
-			  WHERE id = $1`
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	t := &task{
-		ID: id,
-	}
-	err := s.db.QueryRowContext(ctx, query, id).Scan(&t.CreatedAt, &t.UserID, &t.Content, &t.IsCompleted, &t.Version)
-	if err != nil {
-		switch {
-		case errors.Is(err, sql.ErrNoRows):
-			return nil, nil
-		default:
-			return nil, err
-		}
-	}
-	return t, err
-}
-
 func (s *storage) getTasksForUser(u *domain.User, sort string, page, pageSize int, content string) ([]task, int, error) {
 	order := "ASC"
 	if strings.HasPrefix(sort, "-") {
@@ -185,32 +151,4 @@ func (s *storage) getTasksForUser(u *domain.User, sort string, page, pageSize in
 		return nil, 0, err
 	}
 	return tasks, total, nil
-}
-
-func (s *storage) updateTask(t *task) error {
-	query := `UPDATE tasks
-	          SET content = $1, is_completed = $2, version = version + 1
-			  WHERE id = $3 AND version = $4
-			  RETURNING version`
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	err := s.db.QueryRowContext(ctx, query, t.Content, t.IsCompleted, t.ID, t.Version).Scan(&t.Version)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (s *storage) deleteTask(t *task) error {
-	query := `DELETE FROM tasks
-	          WHERE id = $1`
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	_, err := s.db.ExecContext(ctx, query, t.ID)
-	if err != nil {
-		return err
-	}
-	return nil
 }

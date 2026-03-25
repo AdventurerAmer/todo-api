@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/tls"
 	"errors"
 	"flag"
 	"fmt"
@@ -17,9 +15,15 @@ import (
 	"time"
 
 	"github.com/AdventurerAmer/todo-api/internal/core/ports"
+	"github.com/AdventurerAmer/todo-api/internal/core/services/listssrv"
+	"github.com/AdventurerAmer/todo-api/internal/core/services/taskssrv"
 	"github.com/AdventurerAmer/todo-api/internal/core/services/userssrv"
+	"github.com/AdventurerAmer/todo-api/internal/repositories/listsrepo"
+	"github.com/AdventurerAmer/todo-api/internal/repositories/tasksrepo"
 	"github.com/AdventurerAmer/todo-api/internal/repositories/usersrepo"
 	"github.com/AdventurerAmer/todo-api/internal/utils"
+
+	"github.com/joho/godotenv"
 )
 
 const version = "1.0.0"
@@ -54,14 +58,22 @@ type config struct {
 }
 
 type application struct {
-	config       config
-	storage      *storage
-	mailer       *mailer
-	usersRepo    ports.UsersRepository // TODO: remove this from here.
+	config  config
+	mailer  *mailer
+	storage *storage
+
+	usersRepo ports.UsersRepository // TODO: remove this from here.
+
 	usersService ports.UsersService
+	listsService ports.ListsService
+	tasksService ports.TasksService
 }
 
 func main() {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal(err)
+	}
 	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 
 	var cfg config
@@ -112,46 +124,45 @@ func main() {
 	}
 	log.Println("established a connection with database")
 
-	if cfg.jwt.secret == "" {
-		secret := make([]byte, 32)
-		_, err = rand.Read(secret[:])
-		if err != nil {
-			log.Fatal(err)
-		}
-		cfg.jwt.secret = string(secret)
-	}
-
 	mailer :=
 		utils.NewMailer(cfg.smtp.host, cfg.smtp.port, cfg.smtp.username, cfg.smtp.password, cfg.smtp.sender)
 
 	usersRepo := usersrepo.NewPostgres(db)
 	usersService := userssrv.New(usersRepo, templates, mailer, userssrv.DefaultConfig())
 
+	listsRepo := listsrepo.NewPostgres(db)
+	listsService := listssrv.New(listsRepo, listssrv.DefaultConfig())
+
+	tasksRepo := tasksrepo.NewPostgres(db)
+	tasksService := taskssrv.New(tasksRepo, taskssrv.DefaultConfig())
+
 	app := &application{
 		config:       cfg,
-		storage:      newStorage(db),
 		mailer:       newMailer(cfg.smtp.host, cfg.smtp.port, cfg.smtp.username, cfg.smtp.password, cfg.smtp.sender),
+		storage:      newStorage(db),
 		usersService: usersService,
+		listsService: listsService,
+		tasksService: tasksService,
 	}
 
-	tlsConfig := &tls.Config{
-		MinVersion:       tls.VersionTLS12,
-		MaxVersion:       tls.VersionTLS13,
-		CurvePreferences: []tls.CurveID{tls.X25519, tls.CurveP256},
-		CipherSuites: []uint16{
-			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
-			tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
-			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-		},
-	}
+	// tlsConfig := &tls.Config{
+	// 	MinVersion:       tls.VersionTLS12,
+	// 	MaxVersion:       tls.VersionTLS13,
+	// 	CurvePreferences: []tls.CurveID{tls.X25519, tls.CurveP256},
+	// 	CipherSuites: []uint16{
+	// 		tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+	// 		tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+	// 		tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
+	// 		tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
+	// 		tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+	// 		tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+	// 	},
+	// }
 
 	srv := &http.Server{
-		Addr:         fmt.Sprintf(":%d", cfg.port),
-		Handler:      composeRoutes(app),
-		TLSConfig:    tlsConfig,
+		Addr:    fmt.Sprintf(":%d", cfg.port),
+		Handler: composeRoutes(app),
+		// TLSConfig:    tlsConfig,
 		IdleTimeout:  time.Minute,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 30 * time.Second,
@@ -173,7 +184,7 @@ func main() {
 
 	log.Printf("Starting %s server on port %d\n", cfg.env, cfg.port)
 
-	err = srv.ListenAndServeTLS("./tls/cert.pem", "./tls/key.pem")
+	err = srv.ListenAndServe()
 	if !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
 	}

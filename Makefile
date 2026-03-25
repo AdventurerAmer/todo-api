@@ -1,3 +1,6 @@
+include .env
+export
+
 .PHONY: build
 build:
 	@go build -o ./bin/todo ./api

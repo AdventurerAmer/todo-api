@@ -10,10 +10,9 @@ import (
 	"log"
 	"math/rand/v2"
 	"net/http"
-	"slices"
-	"strconv"
 	"time"
 
+	"github.com/AdventurerAmer/todo-api/failures"
 	"github.com/AdventurerAmer/todo-api/internal/core/ports"
 	"github.com/golang-jwt/jwt/v4"
 	"golang.org/x/crypto/bcrypt"
@@ -42,7 +41,7 @@ func (app *application) createUserHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
 	defer cancel()
 
 	resp, err := app.usersService.Create(ctx, req)
@@ -109,65 +108,39 @@ func (app *application) deleteUserHandler(w http.ResponseWriter, r *http.Request
 }
 
 func (app *application) createTaskHandler(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		Content *string `json:"content"`
-	}
-	err := json.NewDecoder(r.Body).Decode(&input)
-	if err != nil {
-		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
-		return
-	}
-	v := newValidator()
-	v.checkCond(input.Content != nil, "content", "must be provided")
-	v.checkCond(input.Content != nil && *input.Content != "", "content", "content must not be empty")
-	if v.hasErrors() {
-		writeError(w, v.toError(), http.StatusBadRequest)
-		return
-	}
 	user := getUserFromRequest(r)
 	if user == nil {
 		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
 		return
 	}
-	t := &task{
-		Content: *input.Content,
-		UserID:  user.ID,
-	}
-	err = app.storage.insertTask(user, t)
+
+	var req ports.CreateTaskRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, map[string]any{"task": t}, http.StatusCreated)
+
+	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	defer cancel()
+
+	resp, err := app.tasksService.Create(ctx, *user, req)
+	if err != nil {
+		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, resp, http.StatusCreated)
 }
 
 func (app *application) updateTaskHandler(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.Atoi(r.PathValue("id"))
-	if err != nil || id < -1 {
-		writeError(w, errors.New("route paramter {id}: must to be a positive integer"), http.StatusBadRequest)
+	id := r.PathValue("id")
+
+	var req ports.UpdateTaskRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, err, http.StatusInternalServerError)
 		return
 	}
-
-	var input struct {
-		Content     *string `json:"content"`
-		IsCompleted *bool   `json:"is_completed"`
-	}
-
-	err = json.NewDecoder(r.Body).Decode(&input)
-	if err != nil {
-		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
-		return
-	}
-
-	v := newValidator()
-	if input.Content != nil {
-		v.checkCond(*input.Content != "", "content", "must not be empty")
-	}
-	v.checkCond(input.Content != nil || input.IsCompleted != nil, "content or is_completed", "must be provided")
-	if v.hasErrors() {
-		writeError(w, v.toError(), http.StatusBadRequest)
-		return
-	}
+	req.ID = id
 
 	user := getUserFromRequest(r)
 	if user == nil {
@@ -175,39 +148,20 @@ func (app *application) updateTaskHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	t, err := app.storage.getTaskByID(id)
+	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	defer cancel()
+
+	resp, err := app.tasksService.Update(ctx, req)
 	if err != nil {
-		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
+		writeError(w, err, http.StatusInternalServerError)
 		return
 	}
-	if t == nil {
-		writeError(w, errors.New("resource doesn't exist"), http.StatusNotFound)
-		return
-	}
-	if t.UserID != user.ID {
-		writeError(w, errors.New("access denied"), http.StatusConflict)
-		return
-	}
-	if input.Content != nil {
-		t.Content = *input.Content
-	}
-	if input.IsCompleted != nil {
-		t.IsCompleted = *input.IsCompleted
-	}
-	err = app.storage.updateTask(t)
-	if err != nil {
-		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
-		return
-	}
-	writeJSON(w, map[string]any{"task": t}, http.StatusOK)
+
+	writeJSON(w, resp, http.StatusOK)
 }
 
 func (app *application) getTaskHandler(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.Atoi(r.PathValue("id"))
-	if err != nil || id < -1 {
-		writeError(w, errors.New("route paramter {id}: must to be a positive integer"), http.StatusBadRequest)
-		return
-	}
+	id := r.PathValue("id")
 
 	user := getUserFromRequest(r)
 	if user == nil {
@@ -215,83 +169,76 @@ func (app *application) getTaskHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	t, err := app.storage.getTaskByID(id)
+	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	defer cancel()
+
+	req := ports.GetTaskRequest{ID: id}
+	resp, err := app.tasksService.Get(ctx, req)
 	if err != nil {
-		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
+		writeError(w, err, http.StatusInternalServerError)
 		return
 	}
-	if t == nil {
-		writeError(w, errors.New("resource doesn't exist"), http.StatusNotFound)
-		return
-	}
-	if t.UserID != user.ID {
-		writeError(w, errors.New("access denied"), http.StatusConflict)
-		return
-	}
-	writeJSON(w, map[string]any{"task": t}, http.StatusOK)
+
+	writeJSON(w, resp, http.StatusOK)
 }
 
-func (app *application) getTasksHandler(w http.ResponseWriter, r *http.Request) {
-	user := getUserFromRequest(r)
-	if user == nil {
-		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
-		return
-	}
+// func (app *application) getTasksHandler(w http.ResponseWriter, r *http.Request) {
+// 	user := getUserFromRequest(r)
+// 	if user == nil {
+// 		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
+// 		return
+// 	}
 
-	query := r.URL.Query()
-	sort := query.Get("sort")
-	if sort == "" {
-		sort = "id"
-	}
+// 	query := r.URL.Query()
+// 	sort := query.Get("sort")
+// 	if sort == "" {
+// 		sort = "id"
+// 	}
 
-	page := 1
-	pageSize := 20
+// 	page := 1
+// 	pageSize := 20
 
-	pageStr := query.Get("page")
-	if pageStr != "" {
-		p, err := strconv.Atoi(pageStr)
-		if err != nil || p <= 0 {
-			writeError(w, errors.New(`invalid query parameter "page": must be a positive integer`), http.StatusBadRequest)
-			return
-		}
-		page = p
-	}
-	pageSizeStr := query.Get("page_size")
-	if pageSizeStr != "" {
-		size, err := strconv.Atoi(pageSizeStr)
-		if err != nil || size <= 0 {
-			writeError(w, errors.New(`invalid query param "page_size": must be a positive integer`), http.StatusBadRequest)
-			return
-		}
-		pageSize = size
-	}
+// 	pageStr := query.Get("page")
+// 	if pageStr != "" {
+// 		p, err := strconv.Atoi(pageStr)
+// 		if err != nil || p <= 0 {
+// 			writeError(w, errors.New(`invalid query parameter "page": must be a positive integer`), http.StatusBadRequest)
+// 			return
+// 		}
+// 		page = p
+// 	}
+// 	pageSizeStr := query.Get("page_size")
+// 	if pageSizeStr != "" {
+// 		size, err := strconv.Atoi(pageSizeStr)
+// 		if err != nil || size <= 0 {
+// 			writeError(w, errors.New(`invalid query param "page_size": must be a positive integer`), http.StatusBadRequest)
+// 			return
+// 		}
+// 		pageSize = size
+// 	}
 
-	v := newValidator()
-	sortList := []string{"id", "-id", "created_at", "-created_at", "is_completed", "-is_completed"}
-	v.checkCond(slices.Index(sortList, sort) != -1, "sort", fmt.Sprintf("must be one of the values %v", sortList))
-	v.checkCond(page >= 1 && page <= 10_000_000, "page", "must be between 1 and 10_000_000")
-	v.checkCond(pageSize >= 1 && page <= 100, "page_size", "must be between 1 and 100")
+// 	v := failures.NewValidator()
+// 	sortList := []string{"id", "-id", "created_at", "-created_at", "is_completed", "-is_completed"}
+// 	v.Check(slices.Index(sortList, sort) != -1, "sort", fmt.Sprintf("must be one of the values %v", sortList))
+// 	v.Check(page >= 1 && page <= 10_000_000, "page", "must be between 1 and 10_000_000")
+// 	v.Check(pageSize >= 1 && page <= 100, "page_size", "must be between 1 and 100")
 
-	content := query.Get("content")
+// 	content := query.Get("content")
 
-	tasks, total, err := app.storage.getTasksForUser(user, sort, page, pageSize, content)
-	if err != nil {
-		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
-		return
-	}
-	if tasks == nil {
-		writeError(w, errors.New("resource doesn't exist"), http.StatusNotFound)
-		return
-	}
-	writeJSON(w, map[string]any{"tasks": tasks, "total": total}, http.StatusOK)
-}
+// 	tasks, total, err := app.storage.getTasksForUser(user, sort, page, pageSize, content)
+// 	if err != nil {
+// 		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
+// 		return
+// 	}
+// 	if tasks == nil {
+// 		writeError(w, errors.New("resource doesn't exist"), http.StatusNotFound)
+// 		return
+// 	}
+// 	writeJSON(w, map[string]any{"tasks": tasks, "total": total}, http.StatusOK)
+// }
 
 func (app *application) deleteTaskHandler(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.Atoi(r.PathValue("id"))
-	if err != nil || id < -1 {
-		writeError(w, errors.New("route paramter {id}: must to be a positive integer"), http.StatusBadRequest)
-		return
-	}
+	id := r.PathValue("id")
 
 	user := getUserFromRequest(r)
 	if user == nil {
@@ -299,25 +246,17 @@ func (app *application) deleteTaskHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	t, err := app.storage.getTaskByID(id)
+	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	defer cancel()
+
+	req := ports.DeleteTaskRequest{ID: id}
+	resp, err := app.tasksService.Delete(ctx, req)
 	if err != nil {
 		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
 		return
 	}
-	if t == nil {
-		writeError(w, errors.New("resource doesn't exist"), http.StatusNotFound)
-		return
-	}
-	if t.UserID != user.ID {
-		writeError(w, errors.New("access denied"), http.StatusConflict)
-		return
-	}
-	err = app.storage.deleteTask(t)
-	if err != nil {
-		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
-		return
-	}
-	writeJSON(w, map[string]any{"message": "task deleted successfully"}, http.StatusOK)
+
+	writeJSON(w, resp, http.StatusOK)
 }
 
 func (app *application) sendActivationCodeHandler(w http.ResponseWriter, r *http.Request) {
@@ -424,12 +363,12 @@ func (app *application) authenticateUserHandler(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	v := newValidator()
-	v.checkEmail(input.Email)
-	v.checkPassword(input.Password)
+	v := failures.NewValidator()
+	v.CheckUTF8Email(input.Email)
+	v.CheckUTF8Password(input.Password)
 
-	if v.hasErrors() {
-		writeError(w, v.toError(), http.StatusBadRequest)
+	if err := v.Err(); err != nil {
+		writeError(w, err, http.StatusBadRequest)
 		return
 	}
 
