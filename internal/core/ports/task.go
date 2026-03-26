@@ -10,17 +10,19 @@ import (
 var ErrTaskNotFound = &failures.ResourceNotFoundError{Name: "task"}
 
 type TasksRepository interface {
-	Create(context.Context, *domain.Task) error
-	Get(context.Context, string) (domain.Task, error)
-	Update(context.Context, *domain.Task) error
-	Delete(context.Context, string) error
+	Create(ctx context.Context, task *domain.Task) error
+	Get(ctx context.Context, id string) (domain.Task, error)
+	GetAll(ctx context.Context, listID string, page, pageSize int, sort, content string, isCompleted *bool) ([]domain.Task, int, error)
+	Update(ctx context.Context, task *domain.Task) error
+	Delete(ctx context.Context, id string) error
 }
 
 type TasksService interface {
-	Create(context.Context, domain.User, CreateTaskRequest) (CreateTaskResponse, error)
-	Get(context.Context, GetTaskRequest) (GetTaskResponse, error)
-	Update(context.Context, UpdateTaskRequest) (UpdateTaskResponse, error)
-	Delete(context.Context, DeleteTaskRequest) (DeleteTaskResponse, error)
+	Create(ctx context.Context, user domain.User, req CreateTaskRequest) (CreateTaskResponse, error)
+	Get(ctx context.Context, req GetTaskRequest) (GetTaskResponse, error)
+	GetAll(ctx context.Context, req GetTasksRequest) (GetTasksResponse, error)
+	Update(ctx context.Context, req UpdateTaskRequest) (UpdateTaskResponse, error)
+	Delete(ctx context.Context, req DeleteTaskRequest) (DeleteTaskResponse, error)
 }
 
 type CreateTaskRequest struct {
@@ -38,6 +40,20 @@ type GetTaskRequest struct {
 
 type GetTaskResponse struct {
 	Task *domain.Task `json:"task"`
+}
+
+type GetTasksRequest struct {
+	ListID      string `json:"list_id"`
+	Page        int    `json:"page"`
+	PageSize    int    `json:"page_size"`
+	Sort        string `json:"sort"`
+	Content     string `json:"conent"`
+	IsCompleted *bool  `json:"is_completed"`
+}
+
+type GetTasksResponse struct {
+	Tasks []domain.Task `json:"tasks"`
+	Total int           `json:"total"`
 }
 
 type UpdateTaskRequest struct {

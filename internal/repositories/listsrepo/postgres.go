@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/AdventurerAmer/todo-api/internal/core/domain"
 	"github.com/AdventurerAmer/todo-api/internal/core/ports"
@@ -45,6 +46,48 @@ func (repo *postgres) Get(ctx context.Context, id string) (domain.List, error) {
 		return domain.List{}, fmt.Errorf("'row.Scan' failed: %w", err)
 	}
 	return list, nil
+}
+
+func (repo *postgres) GetAll(ctx context.Context, userID string, page, pageSize int, sort, title string) ([]domain.List, int, error) {
+	order := "ASC"
+	if strings.HasPrefix(sort, "-") {
+		order = "DESC"
+		sort, _ = strings.CutPrefix(sort, "-")
+	}
+	sortStr := fmt.Sprintf("%s %s", sort, order)
+	if sort != "id" {
+		sortStr = fmt.Sprintf("%s %s, id ASC", sort, order)
+	}
+	limit := pageSize
+	offset := (page - 1) * pageSize
+	query := fmt.Sprintf(`
+			  SELECT count(*) OVER(), id, created_at, updated_at, title, description, version
+			  FROM lists
+			  WHERE user_id = $1 AND ($2 = '' OR to_tsvector('simple', title) @@ plainto_tsquery('simple', $2))
+			  ORDER BY %s
+			  LIMIT $3 OFFSET $4`, sortStr)
+
+	var lists []domain.List
+	rows, err := repo.db.QueryContext(ctx, query, userID, title, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	total := 0
+	for rows.Next() {
+		list := domain.List{
+			UserID: userID,
+		}
+		if err := rows.Scan(&total, &list.ID, &list.CreatedAt, &list.UpdatedAt, &list.Title, &list.Version); err != nil {
+			return nil, 0, err
+		}
+		lists = append(lists, list)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	return lists, total, nil
 }
 
 func (repo *postgres) Update(ctx context.Context, list *domain.List) error {

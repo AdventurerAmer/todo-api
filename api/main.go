@@ -139,7 +139,7 @@ func main() {
 	app := &application{
 		config:       cfg,
 		mailer:       newMailer(cfg.smtp.host, cfg.smtp.port, cfg.smtp.username, cfg.smtp.password, cfg.smtp.sender),
-		storage:      newStorage(db),
+		storage:      newStorage(),
 		usersService: usersService,
 		listsService: listsService,
 		tasksService: tasksService,

@@ -18,7 +18,7 @@ import (
 )
 
 func (app *application) requireAuthenticatedUser(next http.HandlerFunc) http.HandlerFunc {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Vary", "Authorization")
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
@@ -78,7 +78,7 @@ func (app *application) requireAuthenticatedUser(next http.HandlerFunc) http.Han
 		}
 		ctx := context.WithValue(r.Context(), userContextKey, user)
 		next.ServeHTTP(w, r.WithContext(ctx))
-	})
+	}
 }
 
 func requireActivatedUser(next http.HandlerFunc) http.HandlerFunc {

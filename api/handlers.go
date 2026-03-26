@@ -10,6 +10,7 @@ import (
 	"log"
 	"math/rand/v2"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/AdventurerAmer/todo-api/failures"
@@ -182,60 +183,73 @@ func (app *application) getTaskHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, resp, http.StatusOK)
 }
 
-// func (app *application) getTasksHandler(w http.ResponseWriter, r *http.Request) {
-// 	user := getUserFromRequest(r)
-// 	if user == nil {
-// 		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
-// 		return
-// 	}
+func (app *application) getTasksHandler(w http.ResponseWriter, r *http.Request) {
+	user := getUserFromRequest(r)
+	if user == nil {
+		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
+		return
+	}
 
-// 	query := r.URL.Query()
-// 	sort := query.Get("sort")
-// 	if sort == "" {
-// 		sort = "id"
-// 	}
+	query := r.URL.Query()
+	sort := query.Get("sort")
+	if sort == "" {
+		sort = "id"
+	}
 
-// 	page := 1
-// 	pageSize := 20
+	listID := query.Get("list_id")
 
-// 	pageStr := query.Get("page")
-// 	if pageStr != "" {
-// 		p, err := strconv.Atoi(pageStr)
-// 		if err != nil || p <= 0 {
-// 			writeError(w, errors.New(`invalid query parameter "page": must be a positive integer`), http.StatusBadRequest)
-// 			return
-// 		}
-// 		page = p
-// 	}
-// 	pageSizeStr := query.Get("page_size")
-// 	if pageSizeStr != "" {
-// 		size, err := strconv.Atoi(pageSizeStr)
-// 		if err != nil || size <= 0 {
-// 			writeError(w, errors.New(`invalid query param "page_size": must be a positive integer`), http.StatusBadRequest)
-// 			return
-// 		}
-// 		pageSize = size
-// 	}
+	page := 1
+	pageSize := 20
 
-// 	v := failures.NewValidator()
-// 	sortList := []string{"id", "-id", "created_at", "-created_at", "is_completed", "-is_completed"}
-// 	v.Check(slices.Index(sortList, sort) != -1, "sort", fmt.Sprintf("must be one of the values %v", sortList))
-// 	v.Check(page >= 1 && page <= 10_000_000, "page", "must be between 1 and 10_000_000")
-// 	v.Check(pageSize >= 1 && page <= 100, "page_size", "must be between 1 and 100")
+	pageStr := query.Get("page")
+	if pageStr != "" {
+		p, err := strconv.Atoi(pageStr)
+		if err != nil || p <= 0 {
+			writeError(w, errors.New(`invalid query parameter "page": must be a positive integer`), http.StatusBadRequest)
+			return
+		}
+		page = p
+	}
+	pageSizeStr := query.Get("page_size")
+	if pageSizeStr != "" {
+		size, err := strconv.Atoi(pageSizeStr)
+		if err != nil || size <= 0 {
+			writeError(w, errors.New(`invalid query param "page_size": must be a positive integer`), http.StatusBadRequest)
+			return
+		}
+		pageSize = size
+	}
 
-// 	content := query.Get("content")
+	content := query.Get("content")
+	var isCompleted *bool
+	isCompletedQuery := query.Get("is_completed")
+	if isCompletedQuery != "" {
+		t := false
+		if isCompletedQuery == "true" {
+			t = true
+		}
+		isCompleted = &t
+	}
 
-// 	tasks, total, err := app.storage.getTasksForUser(user, sort, page, pageSize, content)
-// 	if err != nil {
-// 		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
-// 		return
-// 	}
-// 	if tasks == nil {
-// 		writeError(w, errors.New("resource doesn't exist"), http.StatusNotFound)
-// 		return
-// 	}
-// 	writeJSON(w, map[string]any{"tasks": tasks, "total": total}, http.StatusOK)
-// }
+	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	defer cancel()
+
+	req := ports.GetTasksRequest{
+		ListID:      listID,
+		Page:        page,
+		PageSize:    pageSize,
+		Sort:        sort,
+		Content:     content,
+		IsCompleted: isCompleted,
+	}
+	resp, err := app.tasksService.GetAll(ctx, req)
+	if err != nil {
+		writeError(w, err, http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, resp, http.StatusOK)
+}
 
 func (app *application) deleteTaskHandler(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")

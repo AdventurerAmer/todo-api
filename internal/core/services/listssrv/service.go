@@ -84,6 +84,28 @@ func (srv *service) Get(ctx context.Context, req ports.GetListRequest) (ports.Ge
 	return resp, nil
 }
 
+func (srv *service) GetAll(ctx context.Context, user domain.User, req ports.GetListsRequest) (ports.GetListsResponse, error) {
+	v := failures.NewValidator()
+	v.Check(req.Page > 0, "page", "must be positive")
+	v.Check(req.PageSize > 0, "page_size", "must be positive")
+	v.CheckUTF8(req.Title, "title")
+	v.CheckAtMostInc(req.Title, utf8.RuneCountInString(req.Title), srv.TitleMaxChars, "characters long")
+	if err := v.Err(); err != nil {
+		return ports.GetListsResponse{}, fmt.Errorf("validation failed: %w", err)
+	}
+
+	lists, total, err := srv.listsRepo.GetAll(ctx, user.ID, req.Page, req.PageSize, req.Sort, req.Title)
+	if err != nil {
+		return ports.GetListsResponse{}, fmt.Errorf("'listsRepo.GetAll' failed: %w", err)
+	}
+
+	resp := ports.GetListsResponse{
+		Lists: lists,
+		Total: total,
+	}
+	return resp, nil
+}
+
 func (srv *service) Update(ctx context.Context, req ports.UpdateListRequest) (ports.UpdateListResponse, error) {
 	v := failures.NewValidator()
 

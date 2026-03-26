@@ -10,17 +10,19 @@ import (
 var ErrListNotFound = &failures.ResourceNotFoundError{Name: "list"}
 
 type ListsRepository interface {
-	Create(context.Context, *domain.List) error
-	Get(context.Context, string) (domain.List, error)
-	Update(context.Context, *domain.List) error
-	Delete(context.Context, string) error
+	Create(ctx context.Context, list *domain.List) error
+	Get(ctx context.Context, id string) (domain.List, error)
+	GetAll(ctx context.Context, userID string, page, pageSize int, sort, title string) ([]domain.List, int, error)
+	Update(ctx context.Context, list *domain.List) error
+	Delete(ctx context.Context, id string) error
 }
 
 type ListsService interface {
-	Create(context.Context, domain.User, CreateListRequest) (CreateListResponse, error)
-	Get(context.Context, GetListRequest) (GetListResponse, error)
-	Update(context.Context, UpdateListRequest) (UpdateListResponse, error)
-	Delete(context.Context, DeleteListRequest) (DeleteListResponse, error)
+	Create(ctx context.Context, user domain.User, req CreateListRequest) (CreateListResponse, error)
+	Get(ctx context.Context, req GetListRequest) (GetListResponse, error)
+	GetAll(ctx context.Context, user domain.User, req GetListsRequest) (GetListsResponse, error)
+	Update(ctx context.Context, req UpdateListRequest) (UpdateListResponse, error)
+	Delete(ctx context.Context, req DeleteListRequest) (DeleteListResponse, error)
 }
 
 type CreateListRequest struct {
@@ -38,6 +40,18 @@ type GetListRequest struct {
 
 type GetListResponse struct {
 	List *domain.List `json:"list"`
+}
+
+type GetListsRequest struct {
+	Page     int    `json:"page"`
+	PageSize int    `json:"page_size"`
+	Sort     string `json:"sort"`
+	Title    string `json:"title"`
+}
+
+type GetListsResponse struct {
+	Lists []domain.List `json:"lists"`
+	Total int           `json:"total"`
 }
 
 type UpdateListRequest struct {
