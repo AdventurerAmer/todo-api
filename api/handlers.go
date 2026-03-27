@@ -108,6 +108,158 @@ func (app *application) deleteUserHandler(w http.ResponseWriter, r *http.Request
 	writeJSON(w, resp, http.StatusOK)
 }
 
+func (app *application) createListHandler(w http.ResponseWriter, r *http.Request) {
+	user := getUserFromRequest(r)
+	if user == nil {
+		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
+		return
+	}
+
+	var req ports.CreateListRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	defer cancel()
+
+	resp, err := app.listsService.Create(ctx, *user, req)
+	if err != nil {
+		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, resp, http.StatusCreated)
+}
+
+func (app *application) updateListHandler(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+
+	var req ports.UpdateListRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, err, http.StatusInternalServerError)
+		return
+	}
+	req.ID = id
+
+	user := getUserFromRequest(r)
+	if user == nil {
+		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	defer cancel()
+
+	resp, err := app.listsService.Update(ctx, req)
+	if err != nil {
+		writeError(w, err, http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, resp, http.StatusOK)
+}
+
+func (app *application) getListHandler(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+
+	user := getUserFromRequest(r)
+	if user == nil {
+		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	defer cancel()
+
+	req := ports.GetListRequest{ID: id}
+	resp, err := app.listsService.Get(ctx, req)
+	if err != nil {
+		writeError(w, err, http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, resp, http.StatusOK)
+}
+
+func (app *application) getListsHandler(w http.ResponseWriter, r *http.Request) {
+	user := getUserFromRequest(r)
+	if user == nil {
+		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
+		return
+	}
+
+	query := r.URL.Query()
+	sort := query.Get("sort")
+	if sort == "" {
+		sort = "id"
+	}
+
+	page := 1
+	pageSize := 20
+
+	pageStr := query.Get("page")
+	if pageStr != "" {
+		p, err := strconv.Atoi(pageStr)
+		if err != nil || p <= 0 {
+			writeError(w, errors.New(`invalid query parameter "page": must be a positive integer`), http.StatusBadRequest)
+			return
+		}
+		page = p
+	}
+	pageSizeStr := query.Get("page_size")
+	if pageSizeStr != "" {
+		size, err := strconv.Atoi(pageSizeStr)
+		if err != nil || size <= 0 {
+			writeError(w, errors.New(`invalid query param "page_size": must be a positive integer`), http.StatusBadRequest)
+			return
+		}
+		pageSize = size
+	}
+
+	title := query.Get("title")
+
+	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	defer cancel()
+
+	req := ports.GetListsRequest{
+		Page:     page,
+		PageSize: pageSize,
+		Sort:     sort,
+		Title:    title,
+	}
+	resp, err := app.listsService.GetAll(ctx, *user, req)
+	if err != nil {
+		writeError(w, err, http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, resp, http.StatusOK)
+}
+
+func (app *application) deleteListandler(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+
+	user := getUserFromRequest(r)
+	if user == nil {
+		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	defer cancel()
+
+	req := ports.DeleteListRequest{ID: id}
+	resp, err := app.listsService.Delete(ctx, req)
+	if err != nil {
+		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, resp, http.StatusOK)
+}
+
 func (app *application) createTaskHandler(w http.ResponseWriter, r *http.Request) {
 	user := getUserFromRequest(r)
 	if user == nil {

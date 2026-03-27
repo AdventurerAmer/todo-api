@@ -43,7 +43,7 @@ func (v *Validator) CheckUTF8(key string, val string) {
 }
 
 func (v *Validator) CheckRangeInc(key string, val int, min int, max int) {
-	v.Check(val < min || val > max, key, fmt.Sprintf("must be between %d and %d both inclusive", min, max))
+	v.Check(val >= min && val <= max, key, fmt.Sprintf("must be between %d and %d both inclusive", min, max))
 }
 
 func (v *Validator) CheckAtMostInc(key string, val int, max int, unit string) {

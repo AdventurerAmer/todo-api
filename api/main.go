@@ -140,6 +140,7 @@ func main() {
 		config:       cfg,
 		mailer:       newMailer(cfg.smtp.host, cfg.smtp.port, cfg.smtp.username, cfg.smtp.password, cfg.smtp.sender),
 		storage:      newStorage(),
+		usersRepo:    usersRepo,
 		usersService: usersService,
 		listsService: listsService,
 		tasksService: tasksService,

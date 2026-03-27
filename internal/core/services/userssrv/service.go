@@ -50,10 +50,6 @@ func (srv *service) Create(ctx context.Context, req ports.CreateUserRequest) (po
 		return ports.CreateUserResponse{}, fmt.Errorf("validation failed: %w", err)
 	}
 
-	if _, err := srv.usersRepo.GetByEmail(ctx, req.Email); err != nil {
-		return ports.CreateUserResponse{}, fmt.Errorf("'usersRepo.GetByEmail' failed: %w", err)
-	}
-
 	// TODO: hardcoding
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(req.Password), 13)
 	if err != nil {

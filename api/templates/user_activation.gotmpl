@@ -2,7 +2,7 @@
 {{define "plainBody"}}
 Hi,
 Thanks for signing up for an account. We're excited to have you on board!
-Please send a request to the `PUT /v1/users/activate` endpoint with the following JSON
+Please send a request to the `PUT /v1/users/{id}/activation` endpoint with the following JSON
 body to activate your account:
 {
     "code": {{.code}}
