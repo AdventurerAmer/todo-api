@@ -2,26 +2,28 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
 	"database/sql"
 
+	"github.com/AdventurerAmer/todo-api/internal/config"
 	"github.com/AdventurerAmer/todo-api/internal/core/domain"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-func openDB(cfg config) (*sql.DB, error) {
-	db, err := sql.Open("pgx", cfg.db.dsn)
+func openDB(cfg config.MainDB) (*sql.DB, error) {
+	db, err := sql.Open("pgx", fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s", cfg.Username, cfg.Password, cfg.Host, cfg.Port, cfg.Name, cfg.SSLMode))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("'sql.Open' failed: %w", err)
 	}
 
-	db.SetMaxOpenConns(cfg.db.maxOpenConnections)
-	db.SetMaxIdleConns(cfg.db.maxIdelConnections)
-	db.SetConnMaxIdleTime(cfg.db.maxIdelTime)
+	db.SetMaxOpenConns(cfg.MaxOpenConnections)
+	db.SetMaxIdleConns(cfg.MaxIdelConnections)
+	db.SetConnMaxIdleTime(cfg.MaxIdelTime)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.PingTimeout)
 	defer cancel()
 
 	if err := db.PingContext(ctx); err != nil {

@@ -5,16 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/AdventurerAmer/todo-api/internal/core/domain"
 	"github.com/AdventurerAmer/todo-api/internal/core/ports"
 	"github.com/golang-jwt/jwt"
-	"golang.org/x/time/rate"
 )
 
 func (app *application) requireAuthenticatedUser(next http.HandlerFunc) http.HandlerFunc {
@@ -35,7 +32,7 @@ func (app *application) requireAuthenticatedUser(next http.HandlerFunc) http.Han
 			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 			}
-			return []byte(app.config.jwt.secret), nil
+			return []byte(app.config.Authentication.JWTSecret), nil
 		})
 		if err != nil {
 			log.Println(err)
@@ -92,55 +89,6 @@ func requireActivatedUser(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func (app *application) rateLimit(next http.Handler) http.HandlerFunc {
-	type client struct {
-		limiter  *rate.Limiter
-		lastSeen time.Time
-	}
-	var (
-		mu      sync.RWMutex
-		clients = make(map[string]client)
-	)
-	go func() {
-		for {
-			time.Sleep(time.Minute)
-			func() {
-				mu.Lock()
-				defer mu.Unlock()
-				for ip, client := range clients {
-					if time.Since(client.lastSeen) >= time.Minute*3 {
-						delete(clients, ip)
-					}
-				}
-			}()
-		}
-	}()
-	return func(w http.ResponseWriter, r *http.Request) {
-		ip, _, err := net.SplitHostPort(r.RemoteAddr)
-		if err != nil {
-			log.Println(err)
-			writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
-			return
-		}
-		mu.Lock()
-		c, ok := clients[ip]
-		if !ok {
-			c = client{
-				limiter: rate.NewLimiter(rate.Limit(app.config.limiter.maxRequestPerSecond), app.config.limiter.burst),
-			}
-		}
-		c.lastSeen = time.Now()
-		clients[ip] = c
-		if !c.limiter.Allow() {
-			mu.Unlock()
-			writeError(w, errors.New("rate limit exceeded"), http.StatusTooManyRequests)
-			return
-		}
-		mu.Unlock()
-		next.ServeHTTP(w, r)
-	}
-}
-
 func (app *application) enableCORS(next http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Vary", "Origin")
@@ -148,7 +96,7 @@ func (app *application) enableCORS(next http.Handler) http.HandlerFunc {
 
 		origin := w.Header().Get("Origin")
 		if origin != "" {
-			for _, o := range app.config.cors.trustedOrigins {
+			for _, o := range app.config.Server.TrustedOrigins {
 				if origin == o || o == "*" {
 					w.Header().Set("Access-Control-Allow-Origin", origin)
 					// preflight request

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/AdventurerAmer/todo-api/failures"
+	"github.com/AdventurerAmer/todo-api/internal/config"
 	"github.com/AdventurerAmer/todo-api/internal/core/ports"
 	"github.com/golang-jwt/jwt/v4"
 	"golang.org/x/crypto/bcrypt"
@@ -23,16 +24,16 @@ import (
 var templates embed.FS
 
 func (app *application) healthCheckHandler(w http.ResponseWriter, r *http.Request) {
-	heathCheck := struct {
-		Status      string `json:"status"`
-		Environment string `json:"environment"`
-		Version     string `json:"version"`
+	resp := struct {
+		Status      string             `json:"status"`
+		Environment config.Environment `json:"environment"`
+		Version     string             `json:"version"`
 	}{
 		Status:      "available",
-		Environment: app.config.env,
+		Environment: app.config.Env,
 		Version:     version,
 	}
-	writeJSON(w, heathCheck, http.StatusOK)
+	writeJSON(w, resp, http.StatusOK)
 }
 
 func (app *application) createUserHandler(w http.ResponseWriter, r *http.Request) {
@@ -455,7 +456,7 @@ func (app *application) sendActivationCodeHandler(w http.ResponseWriter, r *http
 			return
 		}
 		code := uint16(rand.Uint())
-		err = app.mailer.send(u.Email, tmpl, map[string]any{"code": code})
+		err = app.mailer.Send(u.Email, tmpl, map[string]any{"code": code})
 		if err != nil {
 			log.Println(err)
 			writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
@@ -558,7 +559,7 @@ func (app *application) authenticateUserHandler(w http.ResponseWriter, r *http.R
 		"expires_at": time.Now().Add(24 * time.Hour).Format(time.RFC822),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenStr, err := token.SignedString([]byte(app.config.jwt.secret))
+	tokenStr, err := token.SignedString([]byte(app.config.Authentication.JWTSecret))
 	if err != nil {
 		log.Println(err)
 		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
