@@ -2,16 +2,17 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"sync"
 	"time"
 
+	"database/sql"
+
 	"github.com/AdventurerAmer/todo-api/internal/core/domain"
-	_ "github.com/lib/pq"
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 func openDB(cfg config) (*sql.DB, error) {
-	db, err := sql.Open("postgres", cfg.db.dsn)
+	db, err := sql.Open("pgx", cfg.db.dsn)
 	if err != nil {
 		return nil, err
 	}

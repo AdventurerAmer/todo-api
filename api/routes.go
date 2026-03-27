@@ -7,7 +7,7 @@ import (
 func composeRoutes(app *application) http.Handler {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /v1/healthcheck", app.healthCheckHandler)
+	mux.HandleFunc("GET /v1/health", app.healthCheckHandler)
 
 	mux.HandleFunc("POST /v1/users/{id}/activation", app.sendActivationCodeHandler)
 	mux.HandleFunc("PUT /v1/users/{id}/activation", app.activateUserHandler)
