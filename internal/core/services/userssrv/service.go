@@ -16,13 +16,11 @@ import (
 )
 
 type Config struct {
-	NameMaxChars int
-}
+	NameMaxChars     int
+	PasswordHashCost int
 
-func DefaultConfig() Config {
-	return Config{
-		NameMaxChars: 256,
-	}
+	TitleMaxChars       int
+	DescriptionMaxChars int
 }
 
 type service struct {
@@ -50,8 +48,7 @@ func (srv *service) Create(ctx context.Context, req ports.CreateUserRequest) (po
 		return ports.CreateUserResponse{}, fmt.Errorf("validation failed: %w", err)
 	}
 
-	// TODO: hardcoding
-	passwordHash, err := bcrypt.GenerateFromPassword([]byte(req.Password), 13)
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(req.Password), srv.PasswordHashCost)
 	if err != nil {
 		return ports.CreateUserResponse{}, fmt.Errorf("'bcrypt.GenerateFromPassword' failed: %w", err)
 	}

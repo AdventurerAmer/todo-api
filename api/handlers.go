@@ -26,7 +26,7 @@ var templates embed.FS
 func (app *application) healthCheckHandler(w http.ResponseWriter, r *http.Request) {
 	resp := struct {
 		Status      string             `json:"status"`
-		Environment config.Environment `json:"environment"`
+		Environment config.Environment `json:"env"`
 		Version     string             `json:"version"`
 	}{
 		Status:      "available",
@@ -36,6 +36,55 @@ func (app *application) healthCheckHandler(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, resp, http.StatusOK)
 }
 
+func (app *application) authenticateUserHandler(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	err := json.NewDecoder(r.Body).Decode(&input)
+	if err != nil {
+		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
+		return
+	}
+
+	v := failures.NewValidator()
+	v.CheckUTF8Email(input.Email)
+	v.CheckUTF8Password(input.Password)
+
+	if err := v.Err(); err != nil {
+		writeError(w, err, http.StatusBadRequest)
+		return
+	}
+
+	// TODO: hardcoding
+	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
+	defer cancel()
+
+	u, err := app.usersRepo.GetByEmail(ctx, input.Email)
+	if err != nil {
+		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
+		return
+	}
+
+	if err := bcrypt.CompareHashAndPassword(u.PasswordHash, []byte(input.Password)); err != nil {
+		writeError(w, errors.New("email or password are not correct"), http.StatusUnauthorized)
+		return
+	}
+
+	claims := jwt.MapClaims{
+		"user_id":    u.ID,
+		"expires_at": time.Now().Add(24 * time.Hour).Format(time.RFC822),
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenStr, err := token.SignedString([]byte(app.config.Authentication.JWTSecret))
+	if err != nil {
+		log.Println(err)
+		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]any{"token": tokenStr}, http.StatusCreated)
+}
+
 func (app *application) createUserHandler(w http.ResponseWriter, r *http.Request) {
 	var req ports.CreateUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -43,7 +92,7 @@ func (app *application) createUserHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
 	defer cancel()
 
 	resp, err := app.usersService.Create(ctx, req)
@@ -69,7 +118,7 @@ func (app *application) updateUserHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), app.config.Server.DefaultTimeout)
 	defer cancel()
 
 	resp, err := app.usersService.Update(ctx, user, req)
@@ -97,7 +146,7 @@ func (app *application) deleteUserHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), app.config.Server.DefaultTimeout)
 	defer cancel()
 
 	req := ports.DeleteUserRequest{ID: user.ID}
@@ -107,6 +156,94 @@ func (app *application) deleteUserHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 	writeJSON(w, resp, http.StatusOK)
+}
+
+func (app *application) sendActivationCodeHandler(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, errors.New("validation error: id is empty"), http.StatusBadRequest)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
+	defer cancel()
+
+	resp, err := app.usersService.Get(ctx, ports.GetUserRequest{ID: id})
+	if err != nil {
+		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
+		return
+	}
+
+	u := resp.User
+	if u.IsActivated {
+		writeJSON(w, map[string]any{"message": "user already activated"}, http.StatusConflict)
+		return
+	}
+
+	if app.storage.useractivationCache.HasExpired(u) {
+		tmpl, err := template.ParseFS(templates, "templates/*.gotmpl")
+		if err != nil {
+			writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
+			return
+		}
+		code := uint16(rand.Uint())
+		err = app.mailer.Send(u.Email, tmpl, map[string]any{"code": code})
+		if err != nil {
+			log.Println(err)
+			writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
+			return
+		}
+		app.storage.useractivationCache.Set(u, code, time.Minute)
+	}
+	writeJSON(w, map[string]any{"message": fmt.Sprintf("we have sent an activation code to your email: %s", u.Email)}, http.StatusOK)
+}
+
+func (app *application) activateUserHandler(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, errors.New("route paramter {id}: must not be empty"), http.StatusBadRequest)
+		return
+	}
+
+	var input struct {
+		Code int `json:"code"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
+	defer cancel()
+
+	getUserResp, err := app.usersService.Get(ctx, ports.GetUserRequest{ID: id})
+	if err != nil {
+		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
+		return
+	}
+
+	u := getUserResp.User
+	if u.IsActivated {
+		writeJSON(w, map[string]any{"message": "user already activated"}, http.StatusConflict)
+		return
+	}
+
+	activationCode, expired := app.storage.useractivationCache.Get(u)
+	if expired {
+		writeJSON(w, map[string]any{"message": "code has expired"}, http.StatusConflict)
+		return
+	}
+	if activationCode != input.Code {
+		writeJSON(w, map[string]any{"message": "invalid activation code"}, http.StatusConflict)
+		return
+	}
+	u.IsActivated = true
+	if err := app.usersRepo.Update(ctx, u); err != nil {
+		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]any{"message": "user was updated successfully"}, http.StatusOK)
 }
 
 func (app *application) createListHandler(w http.ResponseWriter, r *http.Request) {
@@ -123,7 +260,7 @@ func (app *application) createListHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
 	defer cancel()
 
 	resp, err := app.listsService.Create(ctx, *user, req)
@@ -150,7 +287,7 @@ func (app *application) updateListHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
 	defer cancel()
 
 	resp, err := app.listsService.Update(ctx, req)
@@ -171,7 +308,7 @@ func (app *application) getListHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
 	defer cancel()
 
 	req := ports.GetListRequest{ID: id}
@@ -221,7 +358,7 @@ func (app *application) getListsHandler(w http.ResponseWriter, r *http.Request) 
 
 	title := query.Get("title")
 
-	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
 	defer cancel()
 
 	req := ports.GetListsRequest{
@@ -248,7 +385,7 @@ func (app *application) deleteListandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
 	defer cancel()
 
 	req := ports.DeleteListRequest{ID: id}
@@ -275,7 +412,7 @@ func (app *application) createTaskHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
 	defer cancel()
 
 	resp, err := app.tasksService.Create(ctx, *user, req)
@@ -302,7 +439,7 @@ func (app *application) updateTaskHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
 	defer cancel()
 
 	resp, err := app.tasksService.Update(ctx, req)
@@ -323,7 +460,7 @@ func (app *application) getTaskHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
 	defer cancel()
 
 	req := ports.GetTaskRequest{ID: id}
@@ -384,7 +521,7 @@ func (app *application) getTasksHandler(w http.ResponseWriter, r *http.Request) 
 		isCompleted = &t
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
 	defer cancel()
 
 	req := ports.GetTasksRequest{
@@ -413,7 +550,7 @@ func (app *application) deleteTaskHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
 	defer cancel()
 
 	req := ports.DeleteTaskRequest{ID: id}
@@ -424,148 +561,6 @@ func (app *application) deleteTaskHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	writeJSON(w, resp, http.StatusOK)
-}
-
-func (app *application) sendActivationCodeHandler(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	if id == "" {
-		writeError(w, errors.New("validation error: id is empty"), http.StatusBadRequest)
-		return
-	}
-
-	// TODO: hardcoding
-	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
-	defer cancel()
-
-	resp, err := app.usersService.Get(ctx, ports.GetUserRequest{ID: id})
-	if err != nil {
-		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
-		return
-	}
-
-	u := resp.User
-	if u.IsActivated {
-		writeJSON(w, map[string]any{"message": "user already activated"}, http.StatusConflict)
-		return
-	}
-
-	if app.storage.useractivationCache.HasExpired(u) {
-		tmpl, err := template.ParseFS(templates, "templates/*.gotmpl")
-		if err != nil {
-			writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
-			return
-		}
-		code := uint16(rand.Uint())
-		err = app.mailer.Send(u.Email, tmpl, map[string]any{"code": code})
-		if err != nil {
-			log.Println(err)
-			writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
-			return
-		}
-		app.storage.useractivationCache.Set(u, code, time.Minute)
-	}
-	writeJSON(w, map[string]any{"message": fmt.Sprintf("we have sent an activation code to your email: %s", u.Email)}, http.StatusOK)
-}
-
-func (app *application) activateUserHandler(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	if id == "" {
-		writeError(w, errors.New("route paramter {id}: must not be empty"), http.StatusBadRequest)
-		return
-	}
-
-	var input struct {
-		Code *int `json:"code"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
-		return
-	}
-
-	if input.Code == nil {
-		writeError(w, errors.New("code must be provided in request body"), http.StatusBadRequest)
-		return
-	}
-
-	// TODO: hardcoding
-	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
-	defer cancel()
-
-	getUserResp, err := app.usersService.Get(ctx, ports.GetUserRequest{ID: id})
-	if err != nil {
-		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
-		return
-	}
-	u := getUserResp.User
-	if u.IsActivated {
-		writeJSON(w, map[string]any{"message": "user already activated"}, http.StatusConflict)
-		return
-	}
-	activationCode, expired := app.storage.useractivationCache.Get(u)
-	if expired {
-		writeJSON(w, map[string]any{"message": "code has expired"}, http.StatusConflict)
-		return
-	}
-	if activationCode != *input.Code {
-		writeJSON(w, map[string]any{"message": "invalid activation code"}, http.StatusConflict)
-		return
-	}
-	u.IsActivated = true
-	if err := app.usersRepo.Update(ctx, u); err != nil {
-		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
-		return
-	}
-	writeJSON(w, map[string]any{"message": "user was updated successfully"}, http.StatusOK)
-}
-
-func (app *application) authenticateUserHandler(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
-	}
-	err := json.NewDecoder(r.Body).Decode(&input)
-	if err != nil {
-		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
-		return
-	}
-
-	v := failures.NewValidator()
-	v.CheckUTF8Email(input.Email)
-	v.CheckUTF8Password(input.Password)
-
-	if err := v.Err(); err != nil {
-		writeError(w, err, http.StatusBadRequest)
-		return
-	}
-
-	// TODO: hardcoding
-	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
-	defer cancel()
-
-	u, err := app.usersRepo.GetByEmail(ctx, input.Email)
-	if err != nil {
-		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
-		return
-	}
-
-	if err := bcrypt.CompareHashAndPassword(u.PasswordHash, []byte(input.Password)); err != nil {
-		writeError(w, errors.New("email or password are not correct"), http.StatusUnauthorized)
-		return
-	}
-
-	claims := jwt.MapClaims{
-		"user_id":    u.ID,
-		"expires_at": time.Now().Add(24 * time.Hour).Format(time.RFC822),
-	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenStr, err := token.SignedString([]byte(app.config.Authentication.JWTSecret))
-	if err != nil {
-		log.Println(err)
-		writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
-		return
-	}
-	writeJSON(w, map[string]any{"token": tokenStr}, http.StatusCreated)
 }
 
 func composeJSONError(err error) string {

@@ -35,49 +35,6 @@ type application struct {
 }
 
 func main() {
-	// var cfg config.Config
-	// flag.StringVar(&cfg.env, "env", "dev", "Environment [dev|test|prod]")
-
-	// flag.IntVar(&cfg.port, "port", 3000, "Server Port")
-
-	// flag.StringVar(&cfg.db.dsn, "db-dsn", os.Getenv("DB_DSN"), "PostgreSQL DSN")
-	// flag.IntVar(&cfg.db.maxOpenConnections, "db-max-open-conns", 25, "PostgreSQL max open connections")
-	// flag.IntVar(&cfg.db.maxIdelConnections, "db-max-idel-conns", 25, "PostgreSQL max idel connections")
-	// var maxIdelTime string
-	// flag.StringVar(&maxIdelTime, "db-max-idel-time", "15m", "PostgreSQL max connection idel time")
-
-	// flag.StringVar(&cfg.smtp.host, "smtp-host", os.Getenv("SMTP_HOST"), "SMTP host")
-
-	// smtpPort, err := strconv.Atoi(os.Getenv("SMTP_PORT"))
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-
-	// flag.IntVar(&cfg.smtp.port, "smtp-port", smtpPort, "SMTP port")
-	// flag.StringVar(&cfg.smtp.username, "smtp-username", os.Getenv("SMTP_USERNAME"), "SMTP host")
-	// flag.StringVar(&cfg.smtp.password, "smtp-password", os.Getenv("SMTP_PASSWORD"), "SMTP password")
-	// flag.StringVar(&cfg.smtp.sender, "smtp-sender", os.Getenv("SMTP_SENDER"), "SMTP sender")
-
-	// flag.StringVar(&cfg.jwt.secret, "jwt-secret", os.Getenv("JWT_SECRET"), "JWT secret")
-
-	// flag.Float64Var(&cfg.limiter.maxRequestPerSecond, "limiter-max-rps", 2, "Rate Limiter max requests per second")
-	// flag.IntVar(&cfg.limiter.burst, "limiter-burst", 4, "Rate Limiter max burst")
-	// flag.BoolVar(&cfg.limiter.enabled, "limiter-enabled", true, "Enable rate limiter")
-
-	// var trustedOrigins string
-	// flag.StringVar(&trustedOrigins, "cors-trusted-origins", "*", "Trusted CORS origins saperated by space")
-	// flag.Parse()
-
-	// d, err := time.ParseDuration(maxIdelTime)
-	// if err != nil {
-	// 	cfg.db.maxIdelTime = 15 * time.Minute
-	// 	log.Printf(`invalid value %s for flag "db-max-idel-time" defaulting to %s`, maxIdelTime, cfg.db.maxIdelTime)
-	// } else {
-	// 	cfg.db.maxIdelTime = d
-	// }
-
-	// cfg.cors.trustedOrigins = strings.Fields(trustedOrigins)
-
 	cfg, err := config.Load()
 	if err != nil {
 		slog.Error("config loading failed", "error", err)
@@ -96,13 +53,24 @@ func main() {
 		utils.NewMailer(cfg.MailServer.Host, cfg.MailServer.Port, cfg.MailServer.Username, cfg.MailServer.Password, cfg.MailServer.Sender)
 
 	usersRepo := usersrepo.NewPostgres(db)
-	usersService := userssrv.New(usersRepo, templates, mailer, userssrv.DefaultConfig())
+	usersServiceConfig := userssrv.Config{
+		NameMaxChars:     cfg.Constants.NameMaxChars,
+		PasswordHashCost: cfg.Constants.PasswordHashCost,
+	}
+	usersService := userssrv.New(usersRepo, templates, mailer, usersServiceConfig)
 
 	listsRepo := listsrepo.NewPostgres(db)
-	listsService := listssrv.New(listsRepo, listssrv.DefaultConfig())
+	listsServiceConfig := listssrv.Config{
+		TitleMaxChars:       cfg.Constants.TitleMaxChars,
+		DescriptionMaxChars: cfg.Constants.DescriptionMaxChars,
+	}
+	listsService := listssrv.New(listsRepo, listsServiceConfig)
 
 	tasksRepo := tasksrepo.NewPostgres(db)
-	tasksService := taskssrv.New(tasksRepo, taskssrv.DefaultConfig())
+	tasksServiceConfig := taskssrv.Config{
+		ContentMaxChars: cfg.Constants.ContentMaxChars,
+	}
+	tasksService := taskssrv.New(tasksRepo, tasksServiceConfig)
 
 	app := &application{
 		config:       cfg,

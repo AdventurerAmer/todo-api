@@ -27,6 +27,7 @@ type Config struct {
 	MainDB         MainDB
 	MailServer     MailServer
 	Authentication Authentication
+	Constants      Constants
 }
 
 type ServerConfig struct {
@@ -35,6 +36,7 @@ type ServerConfig struct {
 	ReadTimeout             time.Duration
 	WriteTimeout            time.Duration
 	GracefulShutdownTimeout time.Duration
+	DefaultTimeout          time.Duration
 	TLS                     bool
 	TrustedOrigins          []string
 }
@@ -65,6 +67,16 @@ type Authentication struct {
 	JWTSecret string
 }
 
+type Constants struct {
+	NameMaxChars     int
+	PasswordHashCost int
+
+	TitleMaxChars       int
+	DescriptionMaxChars int
+
+	ContentMaxChars int
+}
+
 func Load() (*Config, error) {
 	if err := godotenv.Load(); err != nil {
 		return nil, fmt.Errorf("'godotenv.Load' failed: %w", err)
@@ -78,6 +90,7 @@ func Load() (*Config, error) {
 	cfg.Server.ReadTimeout, err = loadDuration("TODO_SERVER_READ_TIMEOUT")
 	cfg.Server.WriteTimeout, err = loadDuration("TODO_SERVER_WRITE_TIMEOUT")
 	cfg.Server.GracefulShutdownTimeout, err = loadDuration("TODO_SERVER_GRACEFUL_SHUTDOWN_TIMEOUT")
+	cfg.Server.DefaultTimeout, err = loadDuration("TODO_SERVER_DEFAULT_TIMEOUT")
 	cfg.Server.TLS, err = loadBool("TODO_SERVER_TLS")
 	cfg.Server.TrustedOrigins, err = loadStringSlice("TODO_SERVER_TRUSTED_ORIGINS", ",")
 
@@ -100,6 +113,12 @@ func Load() (*Config, error) {
 	cfg.MailServer.Sender, err = loadString("TODO_MAIL_SERVER_SENDER")
 
 	cfg.Authentication.JWTSecret, err = loadString("TODO_AUTHENTICATION_JWT_SECRET")
+
+	cfg.Constants.NameMaxChars, err = loadInt("TODO_NAME_MAX_CHARS")
+	cfg.Constants.PasswordHashCost, err = loadInt("TODO_PASSWORD_HASH_COST")
+
+	cfg.Constants.TitleMaxChars, err = loadInt("TODO_TITLE_MAX_CHARS")
+	cfg.Constants.DescriptionMaxChars, err = loadInt("TODO_DESCRIPTION_MAX_CHARS")
 
 	if err != nil {
 		return nil, fmt.Errorf("parsing config failed: %w", err)

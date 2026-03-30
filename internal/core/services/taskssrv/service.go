@@ -14,12 +14,6 @@ type Config struct {
 	ContentMaxChars int
 }
 
-func DefaultConfig() Config {
-	return Config{
-		ContentMaxChars: 1024,
-	}
-}
-
 type service struct {
 	Config
 	tasksRepo ports.TasksRepository
