@@ -2,15 +2,15 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/AdventurerAmer/todo-api/failures"
 	"github.com/AdventurerAmer/todo-api/internal/core/domain"
 	"github.com/AdventurerAmer/todo-api/internal/core/ports"
+	"github.com/AdventurerAmer/todo-api/web"
 	"github.com/golang-jwt/jwt"
 )
 
@@ -19,12 +19,14 @@ func (app *application) requireAuthenticatedUser(next http.HandlerFunc) http.Han
 		w.Header().Add("Vary", "Authorization")
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
-			writeError(w, errors.New("invalid Authorization header"), http.StatusUnauthorized)
+			err := &failures.AuthenticationError{Reason: "invalid 'Authorization' header"}
+			web.WriteError(w, err)
 			return
 		}
 		parts := strings.Fields(authHeader)
 		if len(parts) != 2 || parts[0] != "Bearer" {
-			writeError(w, errors.New("invalid Authorization header"), http.StatusUnauthorized)
+			err := &failures.AuthenticationError{Reason: "invalid 'Authorization' header"}
+			web.WriteError(w, err)
 			return
 		}
 		tokenStr := parts[1]
@@ -35,44 +37,42 @@ func (app *application) requireAuthenticatedUser(next http.HandlerFunc) http.Han
 			return []byte(app.config.Authentication.JWTSecret), nil
 		})
 		if err != nil {
-			log.Println(err)
-			writeError(w, errors.New("invalid token"), http.StatusUnauthorized)
+			err := &failures.AuthenticationError{Reason: "invalid token"}
+			web.WriteError(w, err)
 			return
 		}
 		claims, ok := token.Claims.(jwt.MapClaims)
 		if !ok || !token.Valid {
-			log.Println(err)
-			writeError(w, errors.New("invalid token"), http.StatusUnauthorized)
+			err := &failures.AuthenticationError{Reason: "invalid token"}
+			web.WriteError(w, err)
 			return
 		}
 		userID := claims["user_id"].(string)
 		expiresAtStr := claims["expires_at"].(string)
 		expiresAt, err := time.Parse(time.RFC822, expiresAtStr)
 		if err != nil {
-			writeError(w, errors.New("invalid token"), http.StatusUnauthorized)
+			err := &failures.AuthenticationError{Reason: "invalid token"}
+			web.WriteError(w, err)
 			return
 		}
 
 		if time.Now().After(expiresAt) {
-			writeError(w, errors.New("invalid token"), http.StatusUnauthorized)
+			err := &failures.AuthenticationError{Reason: "invalid token"}
+			web.WriteError(w, err)
 			return
 		}
 
-		// TODO: hardcoding
+		// TOOD: hardcoding duration
 		dctx, cancel := context.WithTimeout(r.Context(), time.Second)
 		defer cancel()
 
 		resp, err := app.usersService.Get(dctx, ports.GetUserRequest{ID: userID})
 		if err != nil {
-			log.Println(err)
-			writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
+			err := fmt.Errorf("'usersService.Get' failed: %w", err)
+			web.WriteError(w, err)
 			return
 		}
 		user := resp.User
-		if user == nil {
-			writeError(w, errors.New("user no longer exists"), http.StatusUnauthorized)
-			return
-		}
 		ctx := context.WithValue(r.Context(), userContextKey, user)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	}
@@ -80,9 +80,10 @@ func (app *application) requireAuthenticatedUser(next http.HandlerFunc) http.Han
 
 func requireActivatedUser(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		user := getUserFromRequest(r)
+		user := mustGetUserFromRequestContext(r)
 		if !user.IsActivated {
-			writeError(w, errors.New("your user account must be activated to access this resource"), http.StatusForbidden)
+			err := &failures.AuthorizationError{Reason: "your user account must be activated to access this resource"}
+			web.WriteError(w, err)
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -118,9 +119,9 @@ func recoverFromPanic(next http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if err := recover(); err != nil {
-				log.Println(err)
 				w.Header().Set("Connection", "close")
-				writeError(w, errors.New("internal server error"), http.StatusInternalServerError)
+				err := fmt.Errorf("recovering from panic: %+v", err)
+				web.WriteError(w, err)
 			}
 		}()
 		next.ServeHTTP(w, r)
@@ -131,7 +132,10 @@ type userContext string
 
 const userContextKey userContext = "userContextKey"
 
-func getUserFromRequest(r *http.Request) *domain.User {
-	u, _ := r.Context().Value(userContextKey).(*domain.User)
-	return u
+func mustGetUserFromRequestContext(r *http.Request) *domain.User {
+	user, ok := r.Context().Value(userContextKey).(*domain.User)
+	if !ok {
+		panic("user doesn't exist")
+	}
+	return user
 }
