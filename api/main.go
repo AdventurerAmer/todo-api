@@ -9,29 +9,32 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/AdventurerAmer/todo-api/internal/config"
 	"github.com/AdventurerAmer/todo-api/internal/core/ports"
 	"github.com/AdventurerAmer/todo-api/internal/core/services/listssrv"
 	"github.com/AdventurerAmer/todo-api/internal/core/services/taskssrv"
+	"github.com/AdventurerAmer/todo-api/internal/core/services/tokenssrv"
 	"github.com/AdventurerAmer/todo-api/internal/core/services/userssrv"
 	"github.com/AdventurerAmer/todo-api/internal/repositories/listsrepo"
 	"github.com/AdventurerAmer/todo-api/internal/repositories/tasksrepo"
+	"github.com/AdventurerAmer/todo-api/internal/repositories/tokensrepo"
 	"github.com/AdventurerAmer/todo-api/internal/repositories/usersrepo"
 	"github.com/AdventurerAmer/todo-api/internal/utils"
+	"github.com/redis/go-redis/v9"
 )
 
 const version = "1.0.0"
 
 type application struct {
-	config  *config.Config
-	mailer  *utils.Mailer
-	storage *storage
+	config *config.Config
 
-	usersRepo    ports.UsersRepository // TODO: remove this from here.
-	usersService ports.UsersService
-	listsService ports.ListsService
-	tasksService ports.TasksService
+	usersRepo     ports.UsersRepository // TODO: remove this from here.
+	usersService  ports.UsersService
+	listsService  ports.ListsService
+	tasksService  ports.TasksService
+	tokensService ports.TokensService
 }
 
 func main() {
@@ -48,6 +51,21 @@ func main() {
 	}
 
 	slog.Info("connected to database")
+
+	// TODO: harcoding
+	client := redis.NewClient(&redis.Options{
+		Addr:     "localhost:6379",
+		Password: "redis",
+		DB:       0,
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	if err := client.Ping(ctx); err != nil {
+		slog.Error("cache connection failed", "error", err)
+		os.Exit(1)
+	}
 
 	mailer :=
 		utils.NewMailer(cfg.MailServer.Host, cfg.MailServer.Port, cfg.MailServer.Username, cfg.MailServer.Password, cfg.MailServer.Sender)
@@ -72,14 +90,17 @@ func main() {
 	}
 	tasksService := taskssrv.New(tasksRepo, tasksServiceConfig)
 
+	tokensRepo := tokensrepo.NewRedis(client)
+
+	tokensService := tokenssrv.New(usersRepo, tokensRepo, templates, mailer)
+
 	app := &application{
-		config:       cfg,
-		mailer:       mailer,
-		storage:      newStorage(),
-		usersRepo:    usersRepo,
-		usersService: usersService,
-		listsService: listsService,
-		tasksService: tasksService,
+		config:        cfg,
+		usersRepo:     usersRepo,
+		usersService:  usersService,
+		listsService:  listsService,
+		tasksService:  tasksService,
+		tokensService: tokensService,
 	}
 
 	// tlsConfig := &tls.Config{

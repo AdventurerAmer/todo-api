@@ -5,8 +5,6 @@ import (
 	"embed"
 	"errors"
 	"fmt"
-	"html/template"
-	"math/rand/v2"
 	"net/http"
 	"strconv"
 	"time"
@@ -153,55 +151,24 @@ func (app *application) deleteUserHandler(w http.ResponseWriter, r *http.Request
 }
 
 func (app *application) sendActivationCodeHandler(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-
 	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
 	defer cancel()
 
-	getUserResp, err := app.usersService.Get(ctx, ports.GetUserRequest{ID: id})
+	user := mustGetUserFromRequestContext(r)
+
+	resp, err := app.tokensService.ActivateViaEmail(ctx, *user)
 	if err != nil {
-		err := fmt.Errorf("'usersService.Get' failed: %w", err)
+		err := fmt.Errorf("'tokensService.ActivateViaEmail' failed: %w", err)
 		web.WriteError(w, err)
 		return
 	}
 
-	user := getUserResp.User
-	if user.IsActivated {
-		resp := map[string]any{"message": "user already activated"}
-		web.WriteJSON(w, resp, http.StatusConflict)
-		return
-	}
-
-	if app.storage.useractivationCache.HasExpired(user) {
-		tmpl, err := template.ParseFS(templates, "templates/*.gotmpl")
-		if err != nil {
-			err := fmt.Errorf("'template.ParseFS' failed: %w", err)
-			web.WriteError(w, err)
-			return
-		}
-		code := uint16(rand.Uint())
-		err = app.mailer.Send(user.Email, tmpl, map[string]any{"code": code})
-		if err != nil {
-			err := fmt.Errorf("'mailer.Send' failed: %w", err)
-			web.WriteError(w, err)
-			return
-		}
-		app.storage.useractivationCache.Set(user, code, time.Minute)
-	}
-	resp := map[string]any{
-		"message": fmt.Sprintf("we have sent an activation code to your email: %s", user.Email),
-	}
 	web.WriteJSON(w, resp, http.StatusOK)
 }
 
 func (app *application) activateUserHandler(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-
-	var input struct {
-		Code int `json:"code"`
-	}
-
-	if err := web.ReadJSON(r, &input); err != nil {
+	var req ports.ActivateUserRequest
+	if err := web.ReadJSON(r, &req); err != nil {
 		err := fmt.Errorf("'web.ReadJSON' failed: %w", err)
 		web.WriteError(w, err)
 		return
@@ -210,41 +177,13 @@ func (app *application) activateUserHandler(w http.ResponseWriter, r *http.Reque
 	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
 	defer cancel()
 
-	getUserResp, err := app.usersService.Get(ctx, ports.GetUserRequest{ID: id})
+	resp, err := app.tokensService.ActivateUser(ctx, ports.ActivateUserRequest{Token: req.Token})
 	if err != nil {
-		err := fmt.Errorf("'usersService.Get' failed: %w", err)
+		err := fmt.Errorf("'tokensService.ActivateUser' failed: %w", err)
 		web.WriteError(w, err)
 		return
 	}
 
-	user := getUserResp.User
-	if user.IsActivated {
-		// TOOD: better error here
-		resp := map[string]any{"message": "user is already activated"}
-		web.WriteJSON(w, resp, http.StatusConflict)
-		return
-	}
-
-	activationCode, expired := app.storage.useractivationCache.Get(user)
-	if expired {
-		// TOOD: better error here
-		resp := map[string]any{"message": "code has expired"}
-		web.WriteJSON(w, resp, http.StatusConflict)
-		return
-	}
-	if activationCode != input.Code {
-		// TOOD: better error here
-		resp := map[string]any{"message": "invalid activation code"}
-		web.WriteJSON(w, resp, http.StatusConflict)
-		return
-	}
-	user.IsActivated = true
-	if err := app.usersRepo.Update(ctx, user); err != nil {
-		err := fmt.Errorf("'usersRepo.Update' failed: %w", err)
-		web.WriteError(w, err)
-		return
-	}
-	resp := map[string]any{"message": "user was updated successfully"}
 	web.WriteJSON(w, resp, http.StatusOK)
 }
 
@@ -358,7 +297,8 @@ func (app *application) getListsHandler(w http.ResponseWriter, r *http.Request) 
 	user := mustGetUserFromRequestContext(r)
 	resp, err := app.listsService.GetAll(ctx, *user, req)
 	if err != nil {
-		fmt.Errorf("'listsService.GetAll' failed: %w", err)
+		err := fmt.Errorf("'listsService.GetAll' failed: %w", err)
+		web.WriteError(w, err)
 		return
 	}
 

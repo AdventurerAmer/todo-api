@@ -72,6 +72,7 @@ func WriteError(w http.ResponseWriter, err error) {
 		validationErr     *failures.ValidationError
 		validationsErr    *failures.ValidationsError
 		authenticationErr *failures.AuthenticationError
+		authorizationErr  *failures.AuthorizationError
 	)
 	statusCode := http.StatusInternalServerError
 	resp := struct {
@@ -95,6 +96,9 @@ func WriteError(w http.ResponseWriter, err error) {
 	case errors.As(err, &authenticationErr):
 		resp.Error = err.Error()
 		statusCode = http.StatusUnauthorized
+	case errors.As(err, &authorizationErr):
+		resp.Error = err.Error()
+		statusCode = http.StatusForbidden
 	default:
 		resp.Error = "internal server error"
 	}

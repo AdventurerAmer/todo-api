@@ -9,8 +9,8 @@ func composeRoutes(app *application) http.Handler {
 
 	mux.HandleFunc("GET /v1/health", app.healthCheckHandler)
 
-	mux.HandleFunc("POST /v1/users/{id}/activation", app.sendActivationCodeHandler)
-	mux.HandleFunc("PUT /v1/users/{id}/activation", app.activateUserHandler)
+	mux.HandleFunc("POST /v1/tokens/activation", app.requireAuthenticatedUser(app.sendActivationCodeHandler))
+	mux.HandleFunc("PUT /v1/tokens/activation", app.activateUserHandler)
 
 	mux.HandleFunc("POST /v1/users/authentication", app.authenticateUserHandler)
 
