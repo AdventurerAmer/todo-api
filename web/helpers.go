@@ -102,5 +102,8 @@ func WriteError(w http.ResponseWriter, err error) {
 	default:
 		resp.Error = "internal server error"
 	}
+	if statusCode == http.StatusInternalServerError {
+		slog.Error("internal server error", "error", err)
+	}
 	WriteJSON(w, resp, statusCode)
 }

@@ -14,7 +14,7 @@ import (
 	"github.com/golang-jwt/jwt"
 )
 
-func (app *application) requireAuthenticatedUser(next http.HandlerFunc) http.HandlerFunc {
+func (app *application) Auth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Vary", "Authorization")
 		authHeader := r.Header.Get("Authorization")
@@ -86,44 +86,6 @@ func requireActivatedUser(next http.HandlerFunc) http.HandlerFunc {
 			web.WriteError(w, err)
 			return
 		}
-		next.ServeHTTP(w, r)
-	}
-}
-
-func (app *application) enableCORS(next http.Handler) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Add("Vary", "Origin")
-		w.Header().Add("Vary", "Access-Control-Request-Method")
-
-		origin := w.Header().Get("Origin")
-		if origin != "" {
-			for _, o := range app.config.Server.TrustedOrigins {
-				if origin == o || o == "*" {
-					w.Header().Set("Access-Control-Allow-Origin", origin)
-					// preflight request
-					if r.Method == http.MethodOptions && r.Header.Get("Access-Control-Request-Method") != "" {
-						w.Header().Set("Access-Control-Allow-Methods", "OPTIONS, PUT, PATCH, DELETE")
-						w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
-						w.WriteHeader(http.StatusOK)
-						return
-					}
-					break
-				}
-			}
-		}
-		next.ServeHTTP(w, r)
-	}
-}
-
-func recoverFromPanic(next http.Handler) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		defer func() {
-			if err := recover(); err != nil {
-				w.Header().Set("Connection", "close")
-				err := fmt.Errorf("recovering from panic: %+v", err)
-				web.WriteError(w, err)
-			}
-		}()
 		next.ServeHTTP(w, r)
 	}
 }

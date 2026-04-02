@@ -22,13 +22,14 @@ import (
 	"github.com/AdventurerAmer/todo-api/internal/repositories/tokensrepo"
 	"github.com/AdventurerAmer/todo-api/internal/repositories/usersrepo"
 	"github.com/AdventurerAmer/todo-api/internal/utils"
+	"github.com/AdventurerAmer/todo-api/web"
 )
 
 const version = "1.0.0"
 
 type application struct {
-	config *config.Config
-
+	web.App
+	config        *config.Config
 	usersRepo     ports.UsersRepository // TODO: remove this from here.
 	usersService  ports.UsersService
 	listsService  ports.ListsService
@@ -87,6 +88,12 @@ func main() {
 	tokensService := tokenssrv.New(usersRepo, tokensRepo, templates, mailer)
 
 	app := &application{
+		App: web.App{
+			TrustedOrigins: cfg.Server.TrustedOrigins,
+			AuthHandler: func(token string) (string, error) {
+				return "", nil
+			},
+		},
 		config:        cfg,
 		usersRepo:     usersRepo,
 		usersService:  usersService,
