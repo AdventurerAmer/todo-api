@@ -9,8 +9,8 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
+	"github.com/AdventurerAmer/todo-api/infrastructure"
 	"github.com/AdventurerAmer/todo-api/internal/config"
 	"github.com/AdventurerAmer/todo-api/internal/core/ports"
 	"github.com/AdventurerAmer/todo-api/internal/core/services/listssrv"
@@ -22,7 +22,6 @@ import (
 	"github.com/AdventurerAmer/todo-api/internal/repositories/tokensrepo"
 	"github.com/AdventurerAmer/todo-api/internal/repositories/usersrepo"
 	"github.com/AdventurerAmer/todo-api/internal/utils"
-	"github.com/redis/go-redis/v9"
 )
 
 const version = "1.0.0"
@@ -44,7 +43,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	db, err := openDB(cfg.MainDB)
+	db, err := infrastructure.ConnectToPostgres(cfg.MainDB)
 	if err != nil {
 		slog.Error("database connection failed", "error", err)
 		os.Exit(1)
@@ -52,20 +51,13 @@ func main() {
 
 	slog.Info("connected to database")
 
-	// TODO: harcoding
-	client := redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379",
-		Password: "redis",
-		DB:       0,
-	})
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-
-	if err := client.Ping(ctx); err != nil {
-		slog.Error("cache connection failed", "error", err)
+	tokensCache, err := infrastructure.ConnectToRedis(cfg.TokensCache)
+	if err != nil {
+		slog.Error("tokens cache connection failed", "error", err)
 		os.Exit(1)
 	}
+
+	slog.Info("connected to cache")
 
 	mailer :=
 		utils.NewMailer(cfg.MailServer.Host, cfg.MailServer.Port, cfg.MailServer.Username, cfg.MailServer.Password, cfg.MailServer.Sender)
@@ -90,7 +82,7 @@ func main() {
 	}
 	tasksService := taskssrv.New(tasksRepo, tasksServiceConfig)
 
-	tokensRepo := tokensrepo.NewRedis(client)
+	tokensRepo := tokensrepo.NewRedis(tokensCache)
 
 	tokensService := tokenssrv.New(usersRepo, tokensRepo, templates, mailer)
 

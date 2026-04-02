@@ -1,13 +1,16 @@
 package config
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/AdventurerAmer/todo-api/failures"
+	"github.com/AdventurerAmer/todo-api/infrastructure"
 	"github.com/joho/godotenv"
 )
 
@@ -24,7 +27,8 @@ const (
 type Config struct {
 	Env            Environment
 	Server         ServerConfig
-	MainDB         MainDB
+	MainDB         infrastructure.PostgresConfig
+	TokensCache    infrastructure.RedisConfig
 	MailServer     MailServer
 	Authentication Authentication
 	Constants      Constants
@@ -39,20 +43,6 @@ type ServerConfig struct {
 	DefaultTimeout          time.Duration
 	TLS                     bool
 	TrustedOrigins          []string
-}
-
-type MainDB struct {
-	Username           string
-	Password           string
-	Host               string
-	Port               int
-	Name               string
-	SSLMode            string
-	MaxOpenConnections int
-	MaxIdelConnections int
-	MaxIdelTime        time.Duration
-	StartupTimeout     time.Duration
-	PingTimeout        time.Duration
 }
 
 type MailServer struct {
@@ -78,12 +68,22 @@ type Constants struct {
 }
 
 func Load() (*Config, error) {
+	defaultEnv := "dev"
+	if testing.Testing() {
+		defaultEnv = "test"
+	}
+	var env string
+	flag.StringVar(&env, "env", defaultEnv, "server enviroment (dev, test, prod)")
+	flag.Parse()
+
 	if err := godotenv.Load(); err != nil {
 		return nil, fmt.Errorf("'godotenv.Load' failed: %w", err)
 	}
 
 	var err error
-	cfg := &Config{}
+	cfg := &Config{
+		Env: Environment(env),
+	}
 
 	cfg.Server.Port, err = loadInt("TODO_SERVER_PORT")
 	cfg.Server.IdleTimeout, err = loadDuration("TODO_SERVER_IDEL_TIMEOUT")
@@ -105,6 +105,11 @@ func Load() (*Config, error) {
 	cfg.MainDB.MaxIdelTime, err = loadDuration("TODO_MAIN_DB_IDEL_TIME")
 	cfg.MainDB.StartupTimeout, err = loadDuration("TODO_MAIN_DB_STARTUP_TIMEOUT")
 	cfg.MainDB.PingTimeout, err = loadDuration("TODO_MAIN_DB_PING_TIMEOUT")
+
+	cfg.TokensCache.Addr, err = loadString("TODO_TOKENS_CACHE_ADDR")
+	cfg.TokensCache.Password, err = loadString("TODO_TOKENS_CACHE_PASSWORD")
+	cfg.TokensCache.DB, err = loadInt("TODO_TOKENS_CACHE_DB")
+	cfg.TokensCache.PingTimeout, err = loadDuration("TODO_TOKENS_CACHE_TIMEOUT")
 
 	cfg.MailServer.Host, err = loadString("TODO_MAIL_SERVER_HOST")
 	cfg.MailServer.Port, err = loadInt("TODO_MAIL_SERVER_PORT")

@@ -33,15 +33,15 @@ services:
       - "8080:80"
     depends_on:
       - db
-  redis:
+  tokensCache:
     image: redis:7
     container_name: redis
     ports:
       - '6379:6379'
     volumes:
-      - redis_data:/data
+      - tokens_cache_data:/data
     restart: unless-stopped
 volumes:
   pgdata:
   pgadmin_data:
-  redis_data:
+  tokens_cache_data:
