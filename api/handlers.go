@@ -7,14 +7,10 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"time"
 
-	"github.com/AdventurerAmer/todo-api/failures"
 	"github.com/AdventurerAmer/todo-api/internal/config"
 	"github.com/AdventurerAmer/todo-api/internal/core/ports"
 	"github.com/AdventurerAmer/todo-api/web"
-	"github.com/golang-jwt/jwt/v4"
-	"golang.org/x/crypto/bcrypt"
 )
 
 //go:embed templates
@@ -34,21 +30,9 @@ func (app *application) healthCheckHandler(w http.ResponseWriter, r *http.Reques
 }
 
 func (app *application) authenticateUserHandler(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
-	}
-	if err := web.ReadJSON(r, &input); err != nil {
+	var req ports.CreateAuthTokenRequest
+	if err := web.ReadJSON(r, &req); err != nil {
 		err := fmt.Errorf("'web.ReadJSON' failed: %w", err)
-		web.WriteError(w, err)
-		return
-	}
-
-	v := failures.NewValidator()
-	v.CheckUTF8Email(input.Email)
-	v.CheckUTF8Password(input.Password)
-	if err := v.Err(); err != nil {
-		err := fmt.Errorf("validation failed: %w", err)
 		web.WriteError(w, err)
 		return
 	}
@@ -56,31 +40,13 @@ func (app *application) authenticateUserHandler(w http.ResponseWriter, r *http.R
 	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
 	defer cancel()
 
-	u, err := app.usersRepo.GetByEmail(ctx, input.Email)
+	resp, err := app.tokenAuthService.Create(ctx, req)
 	if err != nil {
-		err := fmt.Errorf("'usersRepo.GetByEmail' failed: %w", err)
+		err := fmt.Errorf("'tokenAuthService.Create' failed: %w", err)
 		web.WriteError(w, err)
 		return
 	}
 
-	if err := bcrypt.CompareHashAndPassword(u.PasswordHash, []byte(input.Password)); err != nil {
-		err := fmt.Errorf("'bcrypt.CompareHashAndPassword' failed: %w", &failures.AuthenticationError{Reason: "email or password are not correct"})
-		web.WriteError(w, err)
-		return
-	}
-
-	claims := jwt.MapClaims{
-		"user_id":    u.ID,
-		"expires_at": time.Now().Add(24 * time.Hour).Format(time.RFC822), // TODO: hardcoding
-	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenStr, err := token.SignedString([]byte(app.config.Authentication.JWTSecret))
-	if err != nil {
-		err := fmt.Errorf("'token.SignedString' failed: %w", err)
-		web.WriteError(w, err)
-		return
-	}
-	resp := map[string]any{"token": tokenStr}
 	web.WriteJSON(w, resp, http.StatusCreated)
 }
 
@@ -113,10 +79,10 @@ func (app *application) updateUserHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	user := mustGetUserFromRequestContext(r)
-
 	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
 	defer cancel()
+
+	user := mustGetUserFromContext(ctx)
 
 	resp, err := app.usersService.Update(ctx, user, req)
 	if err != nil {
@@ -129,17 +95,16 @@ func (app *application) updateUserHandler(w http.ResponseWriter, r *http.Request
 }
 
 func (app *application) getUserHandler(w http.ResponseWriter, r *http.Request) {
-	user := mustGetUserFromRequestContext(r)
+	user := mustGetUserFromContext(r.Context())
 	resp := map[string]any{"user": user}
 	web.WriteJSON(w, resp, http.StatusOK)
 }
 
 func (app *application) deleteUserHandler(w http.ResponseWriter, r *http.Request) {
-	user := mustGetUserFromRequestContext(r)
-
 	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
 	defer cancel()
 
+	user := mustGetUserFromContext(ctx)
 	req := ports.DeleteUserRequest{ID: user.ID}
 	resp, err := app.usersService.Delete(ctx, req)
 	if err != nil {
@@ -154,7 +119,7 @@ func (app *application) sendActivationCodeHandler(w http.ResponseWriter, r *http
 	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
 	defer cancel()
 
-	user := mustGetUserFromRequestContext(r)
+	user := mustGetUserFromContext(ctx)
 
 	resp, err := app.tokensService.ActivateViaEmail(ctx, *user)
 	if err != nil {
@@ -188,8 +153,6 @@ func (app *application) activateUserHandler(w http.ResponseWriter, r *http.Reque
 }
 
 func (app *application) createListHandler(w http.ResponseWriter, r *http.Request) {
-	user := mustGetUserFromRequestContext(r)
-
 	var req ports.CreateListRequest
 	if err := web.ReadJSON(r, &req); err != nil {
 		err := fmt.Errorf("'web.ReadJSON' failed: %w", err)
@@ -199,6 +162,8 @@ func (app *application) createListHandler(w http.ResponseWriter, r *http.Request
 
 	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
 	defer cancel()
+
+	user := mustGetUserFromContext(ctx)
 
 	resp, err := app.listsService.Create(ctx, *user, req)
 	if err != nil {
@@ -220,10 +185,10 @@ func (app *application) updateListHandler(w http.ResponseWriter, r *http.Request
 	}
 	req.ID = id
 
-	_ = mustGetUserFromRequestContext(r)
-
 	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
 	defer cancel()
+
+	_ = mustGetUserFromContext(ctx)
 
 	resp, err := app.listsService.Update(ctx, req)
 	if err != nil {
@@ -238,10 +203,10 @@ func (app *application) updateListHandler(w http.ResponseWriter, r *http.Request
 func (app *application) getListHandler(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 
-	_ = mustGetUserFromRequestContext(r)
-
 	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
 	defer cancel()
+
+	_ = mustGetUserFromContext(ctx)
 
 	req := ports.GetListRequest{ID: id}
 	resp, err := app.listsService.Get(ctx, req)
@@ -294,7 +259,7 @@ func (app *application) getListsHandler(w http.ResponseWriter, r *http.Request) 
 		Sort:     sort,
 		Title:    title,
 	}
-	user := mustGetUserFromRequestContext(r)
+	user := mustGetUserFromContext(ctx)
 	resp, err := app.listsService.GetAll(ctx, *user, req)
 	if err != nil {
 		err := fmt.Errorf("'listsService.GetAll' failed: %w", err)
@@ -308,10 +273,10 @@ func (app *application) getListsHandler(w http.ResponseWriter, r *http.Request) 
 func (app *application) deleteListandler(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 
-	_ = mustGetUserFromRequestContext(r)
-
 	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
 	defer cancel()
+
+	_ = mustGetUserFromContext(ctx)
 
 	req := ports.DeleteListRequest{ID: id}
 	resp, err := app.listsService.Delete(ctx, req)
@@ -324,8 +289,6 @@ func (app *application) deleteListandler(w http.ResponseWriter, r *http.Request)
 }
 
 func (app *application) createTaskHandler(w http.ResponseWriter, r *http.Request) {
-	user := mustGetUserFromRequestContext(r)
-
 	var req ports.CreateTaskRequest
 	if err := web.ReadJSON(r, &req); err != nil {
 		err := fmt.Errorf("'web.ReadJSON' failed: %w", err)
@@ -335,6 +298,8 @@ func (app *application) createTaskHandler(w http.ResponseWriter, r *http.Request
 
 	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
 	defer cancel()
+
+	user := mustGetUserFromContext(ctx)
 
 	resp, err := app.tasksService.Create(ctx, *user, req)
 	if err != nil {
@@ -355,10 +320,10 @@ func (app *application) updateTaskHandler(w http.ResponseWriter, r *http.Request
 	}
 	req.ID = id
 
-	_ = mustGetUserFromRequestContext(r)
-
 	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
 	defer cancel()
+
+	_ = mustGetUserFromContext(ctx)
 
 	resp, err := app.tasksService.Update(ctx, req)
 	if err != nil {
@@ -373,10 +338,10 @@ func (app *application) updateTaskHandler(w http.ResponseWriter, r *http.Request
 func (app *application) getTaskHandler(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 
-	_ = mustGetUserFromRequestContext(r)
-
 	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
 	defer cancel()
+
+	_ = mustGetUserFromContext(ctx)
 
 	req := ports.GetTaskRequest{ID: id}
 	resp, err := app.tasksService.Get(ctx, req)
@@ -390,8 +355,6 @@ func (app *application) getTaskHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *application) getTasksHandler(w http.ResponseWriter, r *http.Request) {
-	_ = mustGetUserFromRequestContext(r)
-
 	query := r.URL.Query()
 	sort := query.Get("sort")
 	if sort == "" {
@@ -436,6 +399,8 @@ func (app *application) getTasksHandler(w http.ResponseWriter, r *http.Request) 
 	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
 	defer cancel()
 
+	_ = mustGetUserFromContext(ctx)
+
 	req := ports.GetTasksRequest{
 		ListID:      listID,
 		Page:        page,
@@ -457,10 +422,10 @@ func (app *application) getTasksHandler(w http.ResponseWriter, r *http.Request) 
 func (app *application) deleteTaskHandler(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 
-	_ = mustGetUserFromRequestContext(r)
-
 	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
 	defer cancel()
+
+	_ = mustGetUserFromContext(ctx)
 
 	req := ports.DeleteTaskRequest{ID: id}
 	resp, err := app.tasksService.Delete(ctx, req)

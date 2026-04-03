@@ -15,6 +15,7 @@ import (
 	"github.com/AdventurerAmer/todo-api/internal/core/ports"
 	"github.com/AdventurerAmer/todo-api/internal/core/services/listssrv"
 	"github.com/AdventurerAmer/todo-api/internal/core/services/taskssrv"
+	"github.com/AdventurerAmer/todo-api/internal/core/services/tokenauthsrv"
 	"github.com/AdventurerAmer/todo-api/internal/core/services/tokenssrv"
 	"github.com/AdventurerAmer/todo-api/internal/core/services/userssrv"
 	"github.com/AdventurerAmer/todo-api/internal/repositories/listsrepo"
@@ -29,12 +30,14 @@ const version = "1.0.0"
 
 type application struct {
 	web.App
-	config        *config.Config
-	usersRepo     ports.UsersRepository // TODO: remove this from here.
-	usersService  ports.UsersService
-	listsService  ports.ListsService
-	tasksService  ports.TasksService
-	tokensService ports.TokensService
+
+	config *config.Config
+
+	usersService     ports.UsersService
+	listsService     ports.ListsService
+	tasksService     ports.TasksService
+	tokensService    ports.TokensService
+	tokenAuthService ports.TokenAuthService
 }
 
 func main() {
@@ -87,19 +90,22 @@ func main() {
 
 	tokensService := tokenssrv.New(usersRepo, tokensRepo, templates, mailer)
 
+	tokenauthsrvCfg := tokenauthsrv.JWTConfig{
+		Secret:            cfg.Authentication.JWTSecret,
+		TokenExpiresAfter: cfg.Authentication.JWTTokenExpiresAfter,
+	}
+	tokenAuthService := tokenauthsrv.NewJWT(usersRepo, tokenauthsrvCfg)
+
 	app := &application{
 		App: web.App{
 			TrustedOrigins: cfg.Server.TrustedOrigins,
-			AuthHandler: func(token string) (string, error) {
-				return "", nil
-			},
 		},
-		config:        cfg,
-		usersRepo:     usersRepo,
-		usersService:  usersService,
-		listsService:  listsService,
-		tasksService:  tasksService,
-		tokensService: tokensService,
+		config:           cfg,
+		usersService:     usersService,
+		listsService:     listsService,
+		tasksService:     tasksService,
+		tokensService:    tokensService,
+		tokenAuthService: tokenAuthService,
 	}
 
 	// tlsConfig := &tls.Config{

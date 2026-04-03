@@ -54,7 +54,8 @@ type MailServer struct {
 }
 
 type Authentication struct {
-	JWTSecret string
+	JWTSecret            string
+	JWTTokenExpiresAfter time.Duration
 }
 
 type Constants struct {
@@ -118,6 +119,7 @@ func Load() (*Config, error) {
 	cfg.MailServer.Sender, err = loadString("TODO_MAIL_SERVER_SENDER")
 
 	cfg.Authentication.JWTSecret, err = loadString("TODO_AUTHENTICATION_JWT_SECRET")
+	cfg.Authentication.JWTTokenExpiresAfter, err = loadDuration("TODO_AUTHENTICATION_JWT_EXPIRES_AFTER")
 
 	cfg.Constants.NameMaxChars, err = loadInt("TODO_NAME_MAX_CHARS")
 	cfg.Constants.PasswordHashCost, err = loadInt("TODO_PASSWORD_HASH_COST")
