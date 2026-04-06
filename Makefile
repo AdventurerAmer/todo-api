@@ -1,6 +1,6 @@
 .PHONY: build
 build:
-	@go build -o ./bin/todo ./api
+	@go build -o ./bin/todo ./cmd/todo
 
 .PHONY: run
 run: build

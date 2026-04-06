@@ -24,8 +24,8 @@ type PostgresConfig struct {
 }
 
 func ConnectToPostgres(cfg PostgresConfig) (*sql.DB, error) {
-	// TODO: user a better connection string format
-	db, err := sql.Open("pgx", fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s", cfg.Username, cfg.Password, cfg.Host, cfg.Port, cfg.Name, cfg.SSLMode))
+	connStr := fmt.Sprintf("user=%s password=%s host=%s port=%d dbname=%s sslmode=%s", cfg.Username, cfg.Password, cfg.Host, cfg.Port, cfg.Name, cfg.SSLMode)
+	db, err := sql.Open("pgx", connStr)
 	if err != nil {
 		return nil, fmt.Errorf("'sql.Open' failed: %w", err)
 	}

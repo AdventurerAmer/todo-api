@@ -1,8 +1,9 @@
-package main
+package v1
 
 import (
 	"context"
 	"crypto/tls"
+	"embed"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -41,7 +42,7 @@ type application struct {
 	tokenAuthService ports.TokenAuthService
 }
 
-func Run() int {
+func Run(templates embed.FS) int {
 	cfg, err := config.Load()
 	if err != nil {
 		slog.Error("config loading failed", "error", err)

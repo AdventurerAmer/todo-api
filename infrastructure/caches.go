@@ -19,7 +19,7 @@ func ConnectToRedis(cfg RedisConfig) (*redis.Client, error) {
 	opts := &redis.Options{
 		Addr:     cfg.Addr,
 		Password: cfg.Password,
-		DB:       0,
+		DB:       cfg.DB,
 	}
 	client := redis.NewClient(opts)
 
