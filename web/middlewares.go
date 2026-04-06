@@ -1,8 +1,12 @@
 package web
 
 import (
+	"context"
 	"fmt"
 	"net/http"
+	"strings"
+
+	"github.com/AdventurerAmer/todo-api/failures"
 )
 
 func (app *App) Panic(next http.Handler) http.Handler {
@@ -41,4 +45,34 @@ func (app *App) CORS(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+type TokenAuthFunc = func(r *http.Request, token string) (context.Context, error)
+
+func (app *App) TokenAuth(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Vary", "Authorization")
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			err := &failures.AuthenticationError{Reason: "invalid 'Authorization' header"}
+			WriteError(w, err)
+			return
+		}
+		parts := strings.Fields(authHeader)
+		if len(parts) != 2 || parts[0] != "Bearer" {
+			err := &failures.AuthenticationError{Reason: "invalid 'Authorization' header"}
+			WriteError(w, err)
+			return
+		}
+		token := parts[1]
+
+		dctx, err := app.TokenAuthHandler(r, token)
+		if err != nil {
+			err := fmt.Errorf("'TokenAuthHandler' failed: %w", err)
+			WriteError(w, err)
+			return
+		}
+
+		next.ServeHTTP(w, r.WithContext(dctx))
+	}
 }

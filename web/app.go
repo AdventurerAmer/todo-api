@@ -1,5 +1,6 @@
 package web
 
 type App struct {
-	TrustedOrigins []string
+	TrustedOrigins   []string
+	TokenAuthHandler TokenAuthFunc
 }

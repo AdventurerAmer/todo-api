@@ -42,6 +42,8 @@ type ServerConfig struct {
 	GracefulShutdownTimeout time.Duration
 	DefaultTimeout          time.Duration
 	TLS                     bool
+	CertFile                string
+	KeyFile                 string
 	TrustedOrigins          []string
 }
 
@@ -93,6 +95,8 @@ func Load() (*Config, error) {
 	cfg.Server.GracefulShutdownTimeout, err = loadDuration("TODO_SERVER_GRACEFUL_SHUTDOWN_TIMEOUT")
 	cfg.Server.DefaultTimeout, err = loadDuration("TODO_SERVER_DEFAULT_TIMEOUT")
 	cfg.Server.TLS, err = loadBool("TODO_SERVER_TLS")
+	cfg.Server.CertFile, err = loadString("TODO_SERVER_CERT_FILE")
+	cfg.Server.KeyFile, err = loadString("TODO_SERVER_KEY_FILE")
 	cfg.Server.TrustedOrigins, err = loadStringSlice("TODO_SERVER_TRUSTED_ORIGINS", ",")
 
 	cfg.MainDB.Username, err = loadString("TODO_MAIN_DB_USERNAME")

@@ -84,7 +84,7 @@ func (app *application) updateUserHandler(w http.ResponseWriter, r *http.Request
 
 	user := mustGetUserFromContext(ctx)
 
-	resp, err := app.usersService.Update(ctx, user, req)
+	resp, err := app.usersService.Update(ctx, &user, req)
 	if err != nil {
 		err := fmt.Errorf("'usersService.Update' failed: %w", err)
 		web.WriteError(w, err)
@@ -121,7 +121,7 @@ func (app *application) sendActivationCodeHandler(w http.ResponseWriter, r *http
 
 	user := mustGetUserFromContext(ctx)
 
-	resp, err := app.tokensService.ActivateViaEmail(ctx, *user)
+	resp, err := app.tokensService.ActivateViaEmail(ctx, user)
 	if err != nil {
 		err := fmt.Errorf("'tokensService.ActivateViaEmail' failed: %w", err)
 		web.WriteError(w, err)
@@ -165,7 +165,7 @@ func (app *application) createListHandler(w http.ResponseWriter, r *http.Request
 
 	user := mustGetUserFromContext(ctx)
 
-	resp, err := app.listsService.Create(ctx, *user, req)
+	resp, err := app.listsService.Create(ctx, user, req)
 	if err != nil {
 		err := fmt.Errorf("'listsService.Create' failed: %w", err)
 		web.WriteError(w, err)
@@ -260,7 +260,7 @@ func (app *application) getListsHandler(w http.ResponseWriter, r *http.Request) 
 		Title:    title,
 	}
 	user := mustGetUserFromContext(ctx)
-	resp, err := app.listsService.GetAll(ctx, *user, req)
+	resp, err := app.listsService.GetAll(ctx, user, req)
 	if err != nil {
 		err := fmt.Errorf("'listsService.GetAll' failed: %w", err)
 		web.WriteError(w, err)
@@ -301,7 +301,7 @@ func (app *application) createTaskHandler(w http.ResponseWriter, r *http.Request
 
 	user := mustGetUserFromContext(ctx)
 
-	resp, err := app.tasksService.Create(ctx, *user, req)
+	resp, err := app.tasksService.Create(ctx, user, req)
 	if err != nil {
 		err := fmt.Errorf("'tasksService.Create' failed: %w", err)
 		web.WriteError(w, err)
