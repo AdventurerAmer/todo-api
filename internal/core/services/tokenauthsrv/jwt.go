@@ -51,9 +51,13 @@ func (srv *jwtService) Create(ctx context.Context, req ports.CreateAuthTokenRequ
 		return ports.CreateAuthTokenResponse{}, err
 	}
 
+	issuedAt := time.Now()
+	expiresAt := issuedAt.Add(srv.TokenExpiresAfter)
+
 	claims := jwt.MapClaims{
-		"userID":    user.ID,
-		"expiresAt": time.Now().Add(srv.TokenExpiresAfter).Format(time.RFC822),
+		"iat":    issuedAt.Unix(),
+		"exp":    expiresAt.Unix(),
+		"userID": user.ID,
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	signedToken, err := token.SignedString([]byte(srv.Secret))
@@ -76,35 +80,30 @@ func (srv *jwtService) Check(ctx context.Context, req ports.CheckAuthTokenReques
 		return ports.CheckAuthTokenResponse{}, err
 	}
 
-	token, err := jwt.Parse(req.Token, func(t *jwt.Token) (any, error) {
+	type CustomCalims struct {
+		jwt.RegisteredClaims
+		UserID string `json:"userID"`
+	}
+
+	keyFunc := func(t *jwt.Token) (any, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 		}
 		return []byte(srv.Secret), nil
-	})
+	}
+
+	token, err := jwt.ParseWithClaims(req.Token, &CustomCalims{}, keyFunc)
 	if err != nil {
 		err := &failures.AuthenticationError{Reason: "invalid token"}
 		return ports.CheckAuthTokenResponse{}, err
 	}
 
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok || !token.Valid {
+	claims, ok := token.Claims.(*CustomCalims)
+	if !token.Valid || !ok {
 		err := &failures.AuthenticationError{Reason: "invalid token"}
 		return ports.CheckAuthTokenResponse{}, err
 	}
-	userID := claims["userId"].(string)
-	expiresAtStr := claims["expiresAt"].(string)
-	expiresAt, err := time.Parse(time.RFC822, expiresAtStr)
-	if err != nil {
-		err := &failures.AuthenticationError{Reason: "invalid token"}
-		return ports.CheckAuthTokenResponse{}, err
-	}
-
-	if time.Now().After(expiresAt) {
-		err := &failures.AuthenticationError{Reason: "invalid token"}
-		return ports.CheckAuthTokenResponse{}, err
-	}
-
+	userID := claims.UserID
 	user, err := srv.usersRepo.Get(ctx, userID)
 	if err != nil {
 		return ports.CheckAuthTokenResponse{}, fmt.Errorf("'usersRepo.Get' failed: %w", err)

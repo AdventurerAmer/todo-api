@@ -7,6 +7,7 @@ type Task struct {
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 	ListID      string    `json:"list_id"`
+	UserID      string    `json:"user_id"`
 	Content     string    `json:"content"`
 	IsCompleted bool      `json:"is_completed"`
 	Version     int       `json:"version"`

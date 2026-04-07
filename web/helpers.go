@@ -8,19 +8,27 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/AdventurerAmer/todo-api/failures"
+	"github.com/microcosm-cc/bluemonday"
 )
 
 const InternalServerError = `{"error": "internal server error"}`
 
 func ReadJSON(r *http.Request, v any) error {
+	if r.Header.Get("Content-Type") != "application/json" {
+		return &failures.UnsupportedMediaTypeError{Type: r.Header.Get("Content-Type")}
+	}
+
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(v); err != nil {
 		var (
 			synatxErr        *json.SyntaxError
 			unmarshalTypeErr *json.UnmarshalTypeError
+			maxBytesErr      *http.MaxBytesError
 		)
 
 		switch {
@@ -30,6 +38,8 @@ func ReadJSON(r *http.Request, v any) error {
 			err = &failures.ValidationError{Reason: "body is empty"}
 		case errors.As(err, &synatxErr):
 			err = &failures.ValidationError{Reason: fmt.Sprintf("body contains malformed JSON at character %d", synatxErr.Offset)}
+		case errors.As(err, &maxBytesErr):
+			err = &failures.ValidationError{Reason: "body is too large"}
 		case errors.As(err, &unmarshalTypeErr):
 			if unmarshalTypeErr.Field != "" {
 				err = &failures.ValidationError{Reason: fmt.Sprintf("body contains incorrect JSON type for field %q", unmarshalTypeErr.Field)}
@@ -41,6 +51,10 @@ func ReadJSON(r *http.Request, v any) error {
 		}
 
 		return fmt.Errorf("'dec.Decode' failed: %w", err)
+	}
+
+	if dec.More() {
+		return &failures.ValidationError{Reason: "request body must contain only one JSON object"}
 	}
 
 	return nil
@@ -67,12 +81,13 @@ func WriteJSON(w http.ResponseWriter, resp any, statusCode int) {
 func WriteError(w http.ResponseWriter, err error) {
 	w.Header().Set("Content-Type", "application/json")
 	var (
-		notFoundErr       *failures.ResourceNotFoundError
-		alreadyExistsErr  *failures.ResourceAlreadyExistsError
-		validationErr     *failures.ValidationError
-		validationsErr    *failures.ValidationsError
-		authenticationErr *failures.AuthenticationError
-		authorizationErr  *failures.AuthorizationError
+		notFoundErr             *failures.ResourceNotFoundError
+		alreadyExistsErr        *failures.ResourceAlreadyExistsError
+		validationErr           *failures.ValidationError
+		validationsErr          *failures.ValidationsError
+		authenticationErr       *failures.AuthenticationError
+		authorizationErr        *failures.AuthorizationError
+		unsupportedMediaTypeErr *failures.UnsupportedMediaTypeError
 	)
 	statusCode := http.StatusInternalServerError
 	resp := struct {
@@ -99,6 +114,9 @@ func WriteError(w http.ResponseWriter, err error) {
 	case errors.As(err, &authorizationErr):
 		resp.Error = err.Error()
 		statusCode = http.StatusForbidden
+	case errors.As(err, &unsupportedMediaTypeErr):
+		resp.Error = err.Error()
+		statusCode = http.StatusUnsupportedMediaType
 	default:
 		resp.Error = "internal server error"
 	}
@@ -106,4 +124,47 @@ func WriteError(w http.ResponseWriter, err error) {
 		slog.Error("internal server error", "error", err)
 	}
 	WriteJSON(w, resp, statusCode)
+}
+
+var policy = bluemonday.StrictPolicy()
+
+func Path(r *http.Request, key string) string {
+	value := r.PathValue(key)
+	return policy.Sanitize(value)
+}
+
+func Query(r *http.Request, key string, defaultVal string) string {
+	if !r.URL.Query().Has(key) {
+		return defaultVal
+	}
+	val := r.URL.Query().Get(key)
+	return policy.Sanitize(val)
+}
+
+func QueryInt(r *http.Request, key string, defaultVal int) (int, error) {
+	if !r.URL.Query().Has(key) {
+		return defaultVal, nil
+	}
+	val := r.URL.Query().Get(key)
+	n, err := strconv.Atoi(val)
+	if err != nil {
+		return 0, fmt.Errorf("'strconv.Atoi' failed: %w", err)
+	}
+	return n, nil
+}
+
+func QueryBool(r *http.Request, key string) (*bool, error) {
+	if !r.URL.Query().Has(key) {
+		return nil, nil
+	}
+	val := strings.ToLower(r.URL.Query().Get(key))
+	switch val {
+	case "true":
+		t := true
+		return &t, nil
+	case "false":
+		t := false
+		return &t, nil
+	}
+	return nil, fmt.Errorf("invalid bool value")
 }

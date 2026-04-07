@@ -11,18 +11,18 @@ var ErrListNotFound = &failures.ResourceNotFoundError{Name: "list"}
 
 type ListsRepository interface {
 	Create(ctx context.Context, list *domain.List) error
-	Get(ctx context.Context, id string) (domain.List, error)
+	Get(ctx context.Context, userID, id string) (domain.List, error)
 	GetAll(ctx context.Context, userID string, page, pageSize int, sort, title string) ([]domain.List, int, error)
 	Update(ctx context.Context, list *domain.List) error
-	Delete(ctx context.Context, id string) error
+	Delete(ctx context.Context, userID, id string) error
 }
 
 type ListsService interface {
 	Create(ctx context.Context, user domain.User, req CreateListRequest) (CreateListResponse, error)
-	Get(ctx context.Context, req GetListRequest) (GetListResponse, error)
+	Get(ctx context.Context, user domain.User, req GetListRequest) (GetListResponse, error)
 	GetAll(ctx context.Context, user domain.User, req GetListsRequest) (GetListsResponse, error)
-	Update(ctx context.Context, req UpdateListRequest) (UpdateListResponse, error)
-	Delete(ctx context.Context, req DeleteListRequest) (DeleteListResponse, error)
+	Update(ctx context.Context, user domain.User, req UpdateListRequest) (UpdateListResponse, error)
+	Delete(ctx context.Context, user domain.User, req DeleteListRequest) (DeleteListResponse, error)
 }
 
 type CreateListRequest struct {

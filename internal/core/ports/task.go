@@ -11,18 +11,18 @@ var ErrTaskNotFound = &failures.ResourceNotFoundError{Name: "task"}
 
 type TasksRepository interface {
 	Create(ctx context.Context, task *domain.Task) error
-	Get(ctx context.Context, id string) (domain.Task, error)
-	GetAll(ctx context.Context, listID string, page, pageSize int, sort, content string, isCompleted *bool) ([]domain.Task, int, error)
+	Get(ctx context.Context, userID, id string) (domain.Task, error)
+	GetAll(ctx context.Context, userID, listID string, page, pageSize int, sort, content string, isCompleted *bool) ([]domain.Task, int, error)
 	Update(ctx context.Context, task *domain.Task) error
-	Delete(ctx context.Context, id string) error
+	Delete(ctx context.Context, userID, id string) error
 }
 
 type TasksService interface {
 	Create(ctx context.Context, user domain.User, req CreateTaskRequest) (CreateTaskResponse, error)
-	Get(ctx context.Context, req GetTaskRequest) (GetTaskResponse, error)
-	GetAll(ctx context.Context, req GetTasksRequest) (GetTasksResponse, error)
-	Update(ctx context.Context, req UpdateTaskRequest) (UpdateTaskResponse, error)
-	Delete(ctx context.Context, req DeleteTaskRequest) (DeleteTaskResponse, error)
+	Get(ctx context.Context, user domain.User, req GetTaskRequest) (GetTaskResponse, error)
+	GetAll(ctx context.Context, user domain.User, req GetTasksRequest) (GetTasksResponse, error)
+	Update(ctx context.Context, user domain.User, req UpdateTaskRequest) (UpdateTaskResponse, error)
+	Delete(ctx context.Context, user domain.User, req DeleteTaskRequest) (DeleteTaskResponse, error)
 }
 
 type CreateTaskRequest struct {

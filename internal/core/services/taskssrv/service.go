@@ -55,7 +55,7 @@ func (srv *service) Create(ctx context.Context, user domain.User, req ports.Crea
 	return resp, nil
 }
 
-func (srv *service) Get(ctx context.Context, req ports.GetTaskRequest) (ports.GetTaskResponse, error) {
+func (srv *service) Get(ctx context.Context, user domain.User, req ports.GetTaskRequest) (ports.GetTaskResponse, error) {
 	v := failures.NewValidator()
 	v.CheckUTF8("id", req.ID)
 	v.CheckNotEmpty("id", req.ID)
@@ -64,7 +64,7 @@ func (srv *service) Get(ctx context.Context, req ports.GetTaskRequest) (ports.Ge
 		return ports.GetTaskResponse{}, fmt.Errorf("validation failed: %w", err)
 	}
 
-	task, err := srv.tasksRepo.Get(ctx, req.ID)
+	task, err := srv.tasksRepo.Get(ctx, user.ID, req.ID)
 	if err != nil {
 		return ports.GetTaskResponse{}, fmt.Errorf("'tasksRepo.Get' failed: %w", err)
 	}
@@ -75,7 +75,7 @@ func (srv *service) Get(ctx context.Context, req ports.GetTaskRequest) (ports.Ge
 	return resp, nil
 }
 
-func (srv *service) GetAll(ctx context.Context, req ports.GetTasksRequest) (ports.GetTasksResponse, error) {
+func (srv *service) GetAll(ctx context.Context, user domain.User, req ports.GetTasksRequest) (ports.GetTasksResponse, error) {
 	v := failures.NewValidator()
 	v.CheckNotEmpty("list_id", req.ListID)
 	v.Check(req.Page > 0, "page", "must be positive")
@@ -86,7 +86,7 @@ func (srv *service) GetAll(ctx context.Context, req ports.GetTasksRequest) (port
 		return ports.GetTasksResponse{}, fmt.Errorf("validation failed: %w", err)
 	}
 
-	tasks, total, err := srv.tasksRepo.GetAll(ctx, req.ListID, req.Page, req.PageSize, req.Sort, req.Content, req.IsCompleted)
+	tasks, total, err := srv.tasksRepo.GetAll(ctx, user.ID, req.ListID, req.Page, req.PageSize, req.Sort, req.Content, req.IsCompleted)
 	if err != nil {
 		return ports.GetTasksResponse{}, fmt.Errorf("'tasksRepo.GetAll' failed: %w", err)
 	}
@@ -99,7 +99,7 @@ func (srv *service) GetAll(ctx context.Context, req ports.GetTasksRequest) (port
 	return resp, nil
 }
 
-func (srv *service) Update(ctx context.Context, req ports.UpdateTaskRequest) (ports.UpdateTaskResponse, error) {
+func (srv *service) Update(ctx context.Context, user domain.User, req ports.UpdateTaskRequest) (ports.UpdateTaskResponse, error) {
 	v := failures.NewValidator()
 
 	v.CheckUTF8("id", req.ID)
@@ -115,7 +115,7 @@ func (srv *service) Update(ctx context.Context, req ports.UpdateTaskRequest) (po
 		return ports.UpdateTaskResponse{}, fmt.Errorf("validation failed: %w", err)
 	}
 
-	task, err := srv.tasksRepo.Get(ctx, req.ID)
+	task, err := srv.tasksRepo.Get(ctx, user.ID, req.ID)
 	if err != nil {
 		return ports.UpdateTaskResponse{}, fmt.Errorf("'tasksRepo.Get' failed: %w", err)
 	}
@@ -137,7 +137,7 @@ func (srv *service) Update(ctx context.Context, req ports.UpdateTaskRequest) (po
 	return resp, nil
 }
 
-func (srv *service) Delete(ctx context.Context, req ports.DeleteTaskRequest) (ports.DeleteTaskResponse, error) {
+func (srv *service) Delete(ctx context.Context, user domain.User, req ports.DeleteTaskRequest) (ports.DeleteTaskResponse, error) {
 	v := failures.NewValidator()
 	v.CheckUTF8("id", req.ID)
 	v.CheckNotEmpty("id", req.ID)
@@ -145,7 +145,7 @@ func (srv *service) Delete(ctx context.Context, req ports.DeleteTaskRequest) (po
 		return ports.DeleteTaskResponse{}, fmt.Errorf("validation failed: %w", err)
 	}
 
-	if err := srv.tasksRepo.Delete(ctx, req.ID); err != nil {
+	if err := srv.tasksRepo.Delete(ctx, user.ID, req.ID); err != nil {
 		return ports.DeleteTaskResponse{}, fmt.Errorf("'tasksRepo.Delete' failed: %w", err)
 	}
 

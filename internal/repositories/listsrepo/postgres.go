@@ -33,13 +33,13 @@ func (repo *postgres) Create(ctx context.Context, list *domain.List) error {
 	return nil
 }
 
-func (repo *postgres) Get(ctx context.Context, id string) (domain.List, error) {
-	query := `SELECT created_at, updated_at, user_id, title, version
+func (repo *postgres) Get(ctx context.Context, userID, id string) (domain.List, error) {
+	query := `SELECT created_at, updated_at, title, version
 			  FROM lists
-			  WHERE id = $1`
-	row := repo.db.QueryRowContext(ctx, query, id)
-	list := domain.List{ID: id}
-	if err := row.Scan(&list.CreatedAt, &list.UpdatedAt, &list.UserID, &list.Title, &list.Version); err != nil {
+			  WHERE user_id = $1 AND id = $2`
+	row := repo.db.QueryRowContext(ctx, query, userID, id)
+	list := domain.List{ID: id, UserID: userID}
+	if err := row.Scan(&list.CreatedAt, &list.UpdatedAt, &list.Title, &list.Version); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return domain.List{}, ports.ErrListNotFound
 		}
@@ -93,10 +93,10 @@ func (repo *postgres) GetAll(ctx context.Context, userID string, page, pageSize 
 func (repo *postgres) Update(ctx context.Context, list *domain.List) error {
 	query := `UPDATE lists 
 			  SET title = $1, description = $2, updated_at = NOW(), version = version + 1
-			  WHERE id = $3 and version = $4
+			  WHERE id = $3 AND user_id = $4 AND version = $5
 			  RETURNING version`
 
-	row := repo.db.QueryRowContext(ctx, query, list.Title, list.Description, list.ID)
+	row := repo.db.QueryRowContext(ctx, query, list.Title, list.Description, list.ID, list.UserID)
 	if err := row.Scan(&list.Version); err != nil {
 		return fmt.Errorf("'row.Scan' failed: %w", err)
 	}
@@ -104,11 +104,11 @@ func (repo *postgres) Update(ctx context.Context, list *domain.List) error {
 	return nil
 }
 
-func (repo *postgres) Delete(ctx context.Context, id string) error {
+func (repo *postgres) Delete(ctx context.Context, userID, id string) error {
 	query := `DELETE FROM lists
-			  WHERE id = $1`
+			  WHERE user_id = $1 AND id = $2`
 
-	if _, err := repo.db.ExecContext(ctx, query, id); err != nil {
+	if _, err := repo.db.ExecContext(ctx, query, userID, id); err != nil {
 		return fmt.Errorf("'ExecContext' failed: %w", err)
 	}
 

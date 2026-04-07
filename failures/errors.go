@@ -92,3 +92,19 @@ func (v *AuthorizationError) Is(target error) bool {
 	}
 	return t.Reason == v.Reason
 }
+
+type UnsupportedMediaTypeError struct {
+	Type string `json:"type"`
+}
+
+func (u *UnsupportedMediaTypeError) Error() string {
+	return fmt.Sprintf("unsupported media type: %q", u.Type)
+}
+
+func (u *UnsupportedMediaTypeError) Is(target error) bool {
+	t, ok := target.(*UnsupportedMediaTypeError)
+	if !ok {
+		return false
+	}
+	return t.Type == u.Type
+}

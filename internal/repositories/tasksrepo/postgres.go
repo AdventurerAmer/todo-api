@@ -33,11 +33,11 @@ func (repo *postgres) Create(ctx context.Context, task *domain.Task) error {
 	return nil
 }
 
-func (repo *postgres) Get(ctx context.Context, id string) (domain.Task, error) {
+func (repo *postgres) Get(ctx context.Context, userID, id string) (domain.Task, error) {
 	query := `SELECT created_at, updated_at, list_id, content, is_completed, version
 			  FROM lists
-			  WHERE id = $1`
-	row := repo.db.QueryRowContext(ctx, query, id)
+			  WHERE user_id = $1 AND id = $2`
+	row := repo.db.QueryRowContext(ctx, query, userID, id)
 	task := domain.Task{ID: id}
 	if err := row.Scan(&task.CreatedAt, &task.UpdatedAt, &task.ListID, &task.Content, &task.IsCompleted, &task.Version); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -48,7 +48,7 @@ func (repo *postgres) Get(ctx context.Context, id string) (domain.Task, error) {
 	return task, nil
 }
 
-func (repo *postgres) GetAll(ctx context.Context, listID string, page, pageSize int, sort, content string, isCompleted *bool) ([]domain.Task, int, error) {
+func (repo *postgres) GetAll(ctx context.Context, userID, listID string, page, pageSize int, sort, content string, isCompleted *bool) ([]domain.Task, int, error) {
 	order := "ASC"
 	if strings.HasPrefix(sort, "-") {
 		order = "DESC"
@@ -63,11 +63,11 @@ func (repo *postgres) GetAll(ctx context.Context, listID string, page, pageSize 
 	query := fmt.Sprintf(`
 			  SELECT count(*) OVER(), id, created_at, updated_at, content, is_completed, version
 			  FROM tasks
-			  WHERE user_id = $1 AND ($2 = '' OR to_tsvector('simple', content) @@ plainto_tsquery('simple', $2)) AND ($3 = NULL OR is_completed = $3)
+			  WHERE list_id = $1 AND user_id = $2 AND ($3 = '' OR to_tsvector('simple', content) @@ plainto_tsquery('simple', $3)) AND ($4 = NULL OR is_completed = $4)
 			  ORDER BY %s
-			  LIMIT $4 OFFSET $5`, sortStr)
+			  LIMIT $5 OFFSET $6`, sortStr)
 
-	rows, err := repo.db.QueryContext(ctx, query, listID, content, isCompleted, limit, offset)
+	rows, err := repo.db.QueryContext(ctx, query, userID, listID, content, isCompleted, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("'QueryContext' failed: %w", err)
 	}
@@ -78,6 +78,7 @@ func (repo *postgres) GetAll(ctx context.Context, listID string, page, pageSize 
 	for rows.Next() {
 		task := domain.Task{
 			ListID: listID,
+			UserID: userID,
 		}
 		if err := rows.Scan(&total, &task.ID, &task.CreatedAt, &task.UpdatedAt, &task.Content, &task.IsCompleted, &task.Version); err != nil {
 			return nil, 0, fmt.Errorf("'rows.Scan' failed: %w", err)
@@ -93,10 +94,10 @@ func (repo *postgres) GetAll(ctx context.Context, listID string, page, pageSize 
 func (repo *postgres) Update(ctx context.Context, task *domain.Task) error {
 	query := `UPDATE tasks 
 			  SET content = $1, is_completed = $2, updated_at = NOW(), version = version + 1
-			  WHERE id = $3 and version = $4
+			  WHERE user_id = $3 AND id = $4 AND version = $5
 			  RETURNING version`
 
-	row := repo.db.QueryRowContext(ctx, query, task.Content, task.IsCompleted, task.ID)
+	row := repo.db.QueryRowContext(ctx, query, task.Content, task.IsCompleted, task.UserID, task.ID)
 	if err := row.Scan(&task.Version); err != nil {
 		return fmt.Errorf("'row.Scan' failed: %w", err)
 	}
@@ -104,9 +105,9 @@ func (repo *postgres) Update(ctx context.Context, task *domain.Task) error {
 	return nil
 }
 
-func (repo *postgres) Delete(ctx context.Context, id string) error {
+func (repo *postgres) Delete(ctx context.Context, userID, id string) error {
 	query := `DELETE FROM tasks
-			  WHERE id = $1`
+			  WHERE user_id = $1 AND id = $2`
 
 	if _, err := repo.db.ExecContext(ctx, query, id); err != nil {
 		return fmt.Errorf("'ExecContext' failed: %w", err)

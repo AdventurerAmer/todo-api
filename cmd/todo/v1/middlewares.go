@@ -13,7 +13,7 @@ type userContext string
 
 const userContextKey userContext = "userContextKey"
 
-func mustGetUserFromContext(ctx context.Context) domain.User {
+func mustGetUserFromCtx(ctx context.Context) domain.User {
 	user, ok := ctx.Value(userContextKey).(domain.User)
 	if !ok {
 		panic("user doesn't exist")
@@ -21,14 +21,14 @@ func mustGetUserFromContext(ctx context.Context) domain.User {
 	return user
 }
 
-func getUserFromContext(ctx context.Context) (domain.User, bool) {
+func getUserFromCtx(ctx context.Context) (domain.User, bool) {
 	user, ok := ctx.Value(userContextKey).(domain.User)
 	return user, ok
 }
 
 func requireActivatedUser(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		user, ok := getUserFromContext(r.Context())
+		user, ok := getUserFromCtx(r.Context())
 		if !ok || !user.IsActivated {
 			err := &failures.AuthorizationError{Reason: "your user account must be activated to access this resource"}
 			web.WriteError(w, err)

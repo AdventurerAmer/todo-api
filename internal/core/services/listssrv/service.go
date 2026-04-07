@@ -57,7 +57,7 @@ func (srv *service) Create(ctx context.Context, user domain.User, req ports.Crea
 	return resp, nil
 }
 
-func (srv *service) Get(ctx context.Context, req ports.GetListRequest) (ports.GetListResponse, error) {
+func (srv *service) Get(ctx context.Context, user domain.User, req ports.GetListRequest) (ports.GetListResponse, error) {
 	v := failures.NewValidator()
 	v.CheckUTF8("id", req.ID)
 	v.CheckNotEmpty("id", req.ID)
@@ -66,7 +66,7 @@ func (srv *service) Get(ctx context.Context, req ports.GetListRequest) (ports.Ge
 		return ports.GetListResponse{}, fmt.Errorf("validation failed: %w", err)
 	}
 
-	list, err := srv.listsRepo.Get(ctx, req.ID)
+	list, err := srv.listsRepo.Get(ctx, user.ID, req.ID)
 	if err != nil {
 		return ports.GetListResponse{}, fmt.Errorf("'listsRepo.Get' failed: %w", err)
 	}
@@ -99,7 +99,7 @@ func (srv *service) GetAll(ctx context.Context, user domain.User, req ports.GetL
 	return resp, nil
 }
 
-func (srv *service) Update(ctx context.Context, req ports.UpdateListRequest) (ports.UpdateListResponse, error) {
+func (srv *service) Update(ctx context.Context, user domain.User, req ports.UpdateListRequest) (ports.UpdateListResponse, error) {
 	v := failures.NewValidator()
 
 	v.CheckUTF8("id", req.ID)
@@ -121,7 +121,7 @@ func (srv *service) Update(ctx context.Context, req ports.UpdateListRequest) (po
 		return ports.UpdateListResponse{}, fmt.Errorf("validation failed: %w", err)
 	}
 
-	list, err := srv.listsRepo.Get(ctx, req.ID)
+	list, err := srv.listsRepo.Get(ctx, user.ID, req.ID)
 	if err != nil {
 		return ports.UpdateListResponse{}, fmt.Errorf("'listsRepo.Get' failed: %w", err)
 	}
@@ -143,7 +143,7 @@ func (srv *service) Update(ctx context.Context, req ports.UpdateListRequest) (po
 	return resp, nil
 }
 
-func (srv *service) Delete(ctx context.Context, req ports.DeleteListRequest) (ports.DeleteListResponse, error) {
+func (srv *service) Delete(ctx context.Context, user domain.User, req ports.DeleteListRequest) (ports.DeleteListResponse, error) {
 	v := failures.NewValidator()
 	v.CheckUTF8("id", req.ID)
 	v.CheckNotEmpty("id", req.ID)
@@ -152,7 +152,7 @@ func (srv *service) Delete(ctx context.Context, req ports.DeleteListRequest) (po
 		return ports.DeleteListResponse{}, fmt.Errorf("validation failed: %w", err)
 	}
 
-	if err := srv.listsRepo.Delete(ctx, req.ID); err != nil {
+	if err := srv.listsRepo.Delete(ctx, user.ID, req.ID); err != nil {
 		return ports.DeleteListResponse{}, fmt.Errorf("'listsRepo.Delete' failed: %w", err)
 	}
 

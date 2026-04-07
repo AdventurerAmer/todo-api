@@ -26,7 +26,7 @@ func composeRoutes(app *application) http.Handler {
 	mux.HandleFunc("DELETE /v1/lists/{id}", app.TokenAuth(requireActivatedUser(app.deleteListandler)))
 
 	mux.HandleFunc("POST /v1/tasks", app.TokenAuth(requireActivatedUser(app.createTaskHandler)))
-	mux.HandleFunc("GET /v1/tasks", app.TokenAuth(requireActivatedUser(app.getTasksHandler)))
+	mux.HandleFunc("GET /v1/lists/{id}/tasks", app.TokenAuth(requireActivatedUser(app.getTasksHandler)))
 	mux.HandleFunc("GET /v1/tasks/{id}", app.TokenAuth(requireActivatedUser(app.getTaskHandler)))
 	mux.HandleFunc("PUT /v1/tasks/{id}", app.TokenAuth(requireActivatedUser(app.updateTaskHandler)))
 	mux.HandleFunc("DELETE /v1/tasks/{id}", app.TokenAuth(requireActivatedUser(app.deleteTaskHandler)))
