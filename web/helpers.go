@@ -8,11 +8,15 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/AdventurerAmer/todo-api/failures"
 	"github.com/microcosm-cc/bluemonday"
+
+	"golang.org/x/text/secure/precis"
 )
 
 const InternalServerError = `{"error": "internal server error"}`
@@ -128,43 +132,92 @@ func WriteError(w http.ResponseWriter, err error) {
 
 var policy = bluemonday.StrictPolicy()
 
-func Path(r *http.Request, key string) string {
-	value := r.PathValue(key)
-	return policy.Sanitize(value)
+func canonicalize(input string) (string, error) {
+	var (
+		err   error
+		prev  string
+		count int
+	)
+
+	for prev != input {
+		if count > 10 {
+			return "", fmt.Errorf("too many escape layers")
+		}
+		prev = input
+		if input, err = url.QueryUnescape(input); err != nil {
+			return "", err
+		}
+	}
+
+	return input, nil
 }
 
-func Query(r *http.Request, key string, defaultVal string) string {
+func Path(r *http.Request, v *failures.Validator, key string) string {
+	var err error
+	val := r.PathValue(key)
+	if !utf8.ValidString(val) {
+		v.Check(false, key, "invalid utf-8 value")
+		return ""
+	}
+	if val, err = canonicalize(val); err != nil {
+		v.Check(false, key, err.Error())
+		return ""
+	}
+	if val, err = precis.UsernameCasePreserved.String(val); err != nil {
+		v.Check(false, key, err.Error())
+		return ""
+	}
+	policy.Sanitize(val)
+	return val
+}
+
+func Query(r *http.Request, v *failures.Validator, key string, defaultVal string) string {
 	if !r.URL.Query().Has(key) {
 		return defaultVal
 	}
 	val := r.URL.Query().Get(key)
+	if !utf8.ValidString(val) {
+		v.Check(false, key, "invalid utf-8 value")
+		return ""
+	}
+	var err error
+	if val, err = canonicalize(val); err != nil {
+		v.Check(false, key, err.Error())
+		return ""
+	}
+	if val, err = precis.UsernameCasePreserved.String(val); err != nil {
+		v.Check(false, key, err.Error())
+		return ""
+	}
 	return policy.Sanitize(val)
 }
 
-func QueryInt(r *http.Request, key string, defaultVal int) (int, error) {
+func QueryInt(r *http.Request, v *failures.Validator, key string, defaultVal int) int {
 	if !r.URL.Query().Has(key) {
-		return defaultVal, nil
+		return defaultVal
 	}
 	val := r.URL.Query().Get(key)
 	n, err := strconv.Atoi(val)
 	if err != nil {
-		return 0, fmt.Errorf("'strconv.Atoi' failed: %w", err)
+		v.Check(false, key, err.Error())
+		return 0
 	}
-	return n, nil
+	return n
 }
 
-func QueryBool(r *http.Request, key string) (*bool, error) {
+func QueryBool(r *http.Request, v *failures.Validator, key string) *bool {
 	if !r.URL.Query().Has(key) {
-		return nil, nil
+		return nil
 	}
 	val := strings.ToLower(r.URL.Query().Get(key))
 	switch val {
 	case "true":
 		t := true
-		return &t, nil
+		return &t
 	case "false":
 		t := false
-		return &t, nil
+		return &t
 	}
-	return nil, fmt.Errorf("invalid bool value")
+	v.Check(false, key, "invalid bool value")
+	return nil
 }

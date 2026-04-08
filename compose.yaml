@@ -1,8 +1,8 @@
 name: todo
 services:
-  db:
+  main-db:
     image: postgres:18.3-alpine
-    container_name: db
+    container_name: main-db
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
@@ -20,9 +20,9 @@ services:
       retries: 5
       start_period: 10s
 
-  pgadmin:
+  pg-admin:
     image: dpage/pgadmin4
-    container_name: pgadmin
+    container_name: pg-admin
     restart: unless-stopped
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@admin.com
@@ -32,16 +32,18 @@ services:
     ports:
       - "8080:80"
     depends_on:
-      - db
-  tokensCache:
+      - main-db
+  
+  tokens-cache:
     image: redis:7
-    container_name: redis
+    container_name: tokens-cache
     ports:
       - '6379:6379'
     volumes:
-      - tokens_cache_data:/data
+      - tokens-cache-data:/data
     restart: unless-stopped
+
 volumes:
   pgdata:
-  pgadmin_data:
-  tokens_cache_data:
+  pgadmin-data:
+  tokens-cache-data:

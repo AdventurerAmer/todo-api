@@ -169,12 +169,21 @@ func (app *application) createListHandler(w http.ResponseWriter, r *http.Request
 }
 
 func (app *application) updateListHandler(w http.ResponseWriter, r *http.Request) {
+	v := failures.NewValidator()
+	id := web.Query(r, v, "id", "")
+
+	if err := v.Err(); err != nil {
+		err := fmt.Errorf("validation failed: %w", err)
+		web.WriteError(w, err)
+		return
+	}
+
 	var req ports.UpdateListRequest
 	if err := web.ReadJSON(r, &req); err != nil {
 		err := fmt.Errorf("'web.ReadJSON' failed: %w", err)
 		web.WriteError(w, err)
 	}
-	req.ID = web.Path(r, "id")
+	req.ID = id
 
 	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
 	defer cancel()
@@ -190,10 +199,18 @@ func (app *application) updateListHandler(w http.ResponseWriter, r *http.Request
 }
 
 func (app *application) getListHandler(w http.ResponseWriter, r *http.Request) {
+	v := failures.NewValidator()
+	id := web.Path(r, v, "id")
+	if err := v.Err(); err != nil {
+		err := fmt.Errorf("validation failed: %w", err)
+		web.WriteError(w, err)
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
 	defer cancel()
 
-	req := ports.GetListRequest{ID: web.Path(r, "id")}
+	req := ports.GetListRequest{ID: id}
 	resp, err := app.listsService.Get(ctx, mustGetUserFromCtx(ctx), req)
 	if err != nil {
 		err := fmt.Errorf("'listsService.Get' failed: %w", err)
@@ -207,12 +224,10 @@ func (app *application) getListHandler(w http.ResponseWriter, r *http.Request) {
 func (app *application) getListsHandler(w http.ResponseWriter, r *http.Request) {
 	v := failures.NewValidator()
 
-	page, err := web.QueryInt(r, "page", 1)
-	v.Check(err == nil, "page", "invalid number")
-
-	pageSize, err := web.QueryInt(r, "page_size", 20) // TODO: hardcoding...
-	v.Check(err == nil, "page_size", "invalid number")
-
+	page := web.QueryInt(r, v, "page", 1)
+	pageSize := web.QueryInt(r, v, "page_size", 20) // TODO: hardcoding...
+	sort := web.Query(r, v, "sort", "created_at")
+	title := web.Query(r, v, "title", "")
 	if err := v.Err(); err != nil {
 		err := fmt.Errorf("validation failed: %w", err)
 		web.WriteError(w, err)
@@ -225,8 +240,8 @@ func (app *application) getListsHandler(w http.ResponseWriter, r *http.Request) 
 	req := ports.GetListsRequest{
 		Page:     page,
 		PageSize: pageSize,
-		Sort:     web.Query(r, "sort", "created_at"),
-		Title:    web.Query(r, "title", ""),
+		Sort:     sort,
+		Title:    title,
 	}
 	resp, err := app.listsService.GetAll(ctx, mustGetUserFromCtx(ctx), req)
 	if err != nil {
@@ -239,10 +254,18 @@ func (app *application) getListsHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 func (app *application) deleteListandler(w http.ResponseWriter, r *http.Request) {
+	v := failures.NewValidator()
+	id := web.Path(r, v, "id")
+	if err := v.Err(); err != nil {
+		err := fmt.Errorf("validation failed: %w", err)
+		web.WriteError(w, err)
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
 	defer cancel()
 
-	req := ports.DeleteListRequest{ID: web.Path(r, "id")}
+	req := ports.DeleteListRequest{ID: id}
 	resp, err := app.listsService.Delete(ctx, mustGetUserFromCtx(ctx), req)
 	if err != nil {
 		web.WriteError(w, fmt.Errorf("'listsService.Delete' failed: %w", err))
@@ -275,12 +298,20 @@ func (app *application) createTaskHandler(w http.ResponseWriter, r *http.Request
 }
 
 func (app *application) updateTaskHandler(w http.ResponseWriter, r *http.Request) {
+	v := failures.NewValidator()
+	id := web.Path(r, v, "id")
+	if err := v.Err(); err != nil {
+		err := fmt.Errorf("validation failed: %w", err)
+		web.WriteError(w, err)
+		return
+	}
+
 	var req ports.UpdateTaskRequest
 	if err := web.ReadJSON(r, &req); err != nil {
 		err := fmt.Errorf("'web.ReadJSON' failed: %w", err)
 		web.WriteError(w, err)
 	}
-	req.ID = web.Path(r, "id")
+	req.ID = id
 
 	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
 	defer cancel()
@@ -296,10 +327,18 @@ func (app *application) updateTaskHandler(w http.ResponseWriter, r *http.Request
 }
 
 func (app *application) getTaskHandler(w http.ResponseWriter, r *http.Request) {
+	v := failures.NewValidator()
+	id := web.Path(r, v, "id")
+	if err := v.Err(); err != nil {
+		err := fmt.Errorf("validation failed: %w", err)
+		web.WriteError(w, err)
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
 	defer cancel()
 
-	req := ports.GetTaskRequest{ID: web.Path(r, "id")}
+	req := ports.GetTaskRequest{ID: id}
 	resp, err := app.tasksService.Get(ctx, mustGetUserFromCtx(ctx), req)
 	if err != nil {
 		err := fmt.Errorf("'tasksService.Get' failed: %w", err)
@@ -313,15 +352,12 @@ func (app *application) getTaskHandler(w http.ResponseWriter, r *http.Request) {
 func (app *application) getTasksHandler(w http.ResponseWriter, r *http.Request) {
 	v := failures.NewValidator()
 
-	page, err := web.QueryInt(r, "page", 1)
-	v.Check(err == nil, "page", "invalid number")
-
-	pageSize, err := web.QueryInt(r, "page_size", 20) // TODO: hardcoding...
-	v.Check(err == nil, "page_size", "invalid number")
-
-	isCompleted, err := web.QueryBool(r, "is_completed")
-	v.Check(err == nil, "page_size", "invalid bool")
-
+	id := web.Path(r, v, "id")
+	page := web.QueryInt(r, v, "page", 1)
+	pageSize := web.QueryInt(r, v, "page_size", 20) // TODO: hardcoding...
+	sort := web.Query(r, v, "sort", "created_at")
+	content := web.Query(r, v, "content", "")
+	isCompleted := web.QueryBool(r, v, "is_completed")
 	if err := v.Err(); err != nil {
 		err := fmt.Errorf("validation failed: %w", err)
 		web.WriteError(w, err)
@@ -332,11 +368,11 @@ func (app *application) getTasksHandler(w http.ResponseWriter, r *http.Request) 
 	defer cancel()
 
 	req := ports.GetTasksRequest{
-		ListID:      web.Path(r, "id"),
+		ListID:      id,
 		Page:        page,
 		PageSize:    pageSize,
-		Sort:        web.Query(r, "sort", "created_at"),
-		Content:     web.Query(r, "content", ""),
+		Sort:        sort,
+		Content:     content,
 		IsCompleted: isCompleted,
 	}
 	resp, err := app.tasksService.GetAll(ctx, mustGetUserFromCtx(ctx), req)
@@ -350,10 +386,18 @@ func (app *application) getTasksHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 func (app *application) deleteTaskHandler(w http.ResponseWriter, r *http.Request) {
+	v := failures.NewValidator()
+	id := web.Path(r, v, "id")
+	if err := v.Err(); err != nil {
+		err := fmt.Errorf("validation failed: %w", err)
+		web.WriteError(w, err)
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
 	defer cancel()
 
-	req := ports.DeleteTaskRequest{ID: web.Path(r, "id")}
+	req := ports.DeleteTaskRequest{ID: id}
 	resp, err := app.tasksService.Delete(ctx, mustGetUserFromCtx(ctx), req)
 	if err != nil {
 		err := fmt.Errorf("'tasksService.Delete' failed: %w", err)
