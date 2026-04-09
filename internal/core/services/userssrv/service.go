@@ -17,6 +17,8 @@ import (
 
 type Config struct {
 	NameMaxChars     int
+	PasswardMinChars int
+	PasswardMaxChars int
 	PasswordHashCost int
 
 	TitleMaxChars       int
@@ -43,7 +45,7 @@ func (srv *service) Create(ctx context.Context, req ports.CreateUserRequest) (po
 	v := failures.NewValidator()
 	srv.validateName(v, req.Name)
 	v.CheckUTF8Email(req.Email)
-	v.CheckUTF8Password(req.Password)
+	srv.validatePassward(v, req.Password)
 	if err := v.Err(); err != nil {
 		return ports.CreateUserResponse{}, fmt.Errorf("validation failed: %w", err)
 	}
@@ -130,4 +132,10 @@ func (srv *service) validateName(v *failures.Validator, name string) {
 	v.Check(name != "", "name", "must be provided")
 	v.CheckUTF8("name", name)
 	v.CheckAtMostInc("name", utf8.RuneCountInString(name), srv.NameMaxChars, "characters long")
+}
+
+func (srv *service) validatePassward(v *failures.Validator, password string) {
+	v.Check(password != "", "password", "must be provided")
+	v.CheckUTF8("password", password)
+	v.CheckRangeInc("password", utf8.RuneCountInString(password), srv.PasswardMinChars, srv.PasswardMaxChars)
 }

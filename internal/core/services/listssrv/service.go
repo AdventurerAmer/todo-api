@@ -13,6 +13,7 @@ import (
 type Config struct {
 	TitleMaxChars       int
 	DescriptionMaxChars int
+	MaxQuery            int
 }
 
 type service struct {
@@ -87,7 +88,8 @@ func (srv *service) GetAll(ctx context.Context, user domain.User, req ports.GetL
 		return ports.GetListsResponse{}, fmt.Errorf("validation failed: %w", err)
 	}
 
-	lists, total, err := srv.listsRepo.GetAll(ctx, user.ID, req.Page, req.PageSize, req.Sort, req.Title)
+	pageSize := min(req.PageSize, srv.MaxQuery)
+	lists, total, err := srv.listsRepo.GetAll(ctx, user.ID, req.Page, pageSize, req.Sort, req.Title)
 	if err != nil {
 		return ports.GetListsResponse{}, fmt.Errorf("'listsRepo.GetAll' failed: %w", err)
 	}

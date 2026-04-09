@@ -2,7 +2,6 @@ name: todo
 services:
   main-db:
     image: postgres:18.3-alpine
-    container_name: main-db
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
@@ -22,13 +21,12 @@ services:
 
   pg-admin:
     image: dpage/pgadmin4
-    container_name: pg-admin
     restart: unless-stopped
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@admin.com
       PGADMIN_DEFAULT_PASSWORD: admin
     volumes:
-      - pgadmin_data:/var/lib/pgadmin
+      - pgadmin-data:/var/lib/pgadmin
     ports:
       - "8080:80"
     depends_on:
@@ -36,14 +34,39 @@ services:
   
   tokens-cache:
     image: redis:7
-    container_name: tokens-cache
     ports:
       - '6379:6379'
     volumes:
       - tokens-cache-data:/data
     restart: unless-stopped
 
+  main-queue:
+    image: rabbitmq:4-management
+    hostname: rabbitmq
+    restart: unless-stopped
+
+    ports:
+      - "5672:5672"   # AMQP port (for your applications)
+      - "15672:15672" # Management UI
+
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin
+      RABBITMQ_DEFAULT_VHOST: /
+      
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+      - rabbitmq-logs:/var/log/rabbitmq
+
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   pgdata:
   pgadmin-data:
   tokens-cache-data:
+  rabbitmq-data:
+  rabbitmq-logs:

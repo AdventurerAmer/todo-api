@@ -60,9 +60,3 @@ func (v *Validator) CheckUTF8Email(email string) {
 	v.CheckAtMostInc("email", utf8.RuneCountInString(email), 320, "characters long")
 	v.Check(emailRegexp.MatchString(email), "email", "must be a valid")
 }
-
-func (v *Validator) CheckUTF8Password(password string) {
-	v.Check(password != "", "password", "must be provided")
-	v.CheckUTF8("password", password)
-	v.CheckRangeInc("password", utf8.RuneCountInString(password), 8, 72)
-}

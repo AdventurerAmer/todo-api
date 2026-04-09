@@ -32,7 +32,8 @@ func NewJWT(usersRepo ports.UsersRepository, cfg JWTConfig) ports.TokenAuthServi
 func (srv *jwtService) Create(ctx context.Context, req ports.CreateAuthTokenRequest) (ports.CreateAuthTokenResponse, error) {
 	v := failures.NewValidator()
 	v.CheckUTF8Email(req.Email)
-	v.CheckUTF8Password(req.Password)
+	v.CheckNotEmpty("passward", req.Password)
+	v.CheckUTF8("passward", req.Password)
 	if err := v.Err(); err != nil {
 		return ports.CreateAuthTokenResponse{}, fmt.Errorf("validation failed: %w", err)
 	}

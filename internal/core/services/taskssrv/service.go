@@ -12,6 +12,7 @@ import (
 
 type Config struct {
 	ContentMaxChars int
+	MaxQuery        int
 }
 
 type service struct {
@@ -31,7 +32,6 @@ func (srv *service) Create(ctx context.Context, user domain.User, req ports.Crea
 
 	v.CheckNotEmpty("list_id", req.ListID)
 	v.CheckUTF8("list_id", req.ListID)
-
 	v.CheckUTF8("content", req.Content)
 	v.CheckNotEmpty("content", req.Content)
 	v.CheckAtMostInc("content", utf8.RuneCountInString(req.Content), srv.ContentMaxChars, "characters long")
@@ -42,6 +42,7 @@ func (srv *service) Create(ctx context.Context, user domain.User, req ports.Crea
 
 	task := &domain.Task{
 		ListID:      req.ListID,
+		UserID:      user.ID,
 		Content:     req.Content,
 		IsCompleted: false,
 	}
@@ -86,7 +87,8 @@ func (srv *service) GetAll(ctx context.Context, user domain.User, req ports.GetT
 		return ports.GetTasksResponse{}, fmt.Errorf("validation failed: %w", err)
 	}
 
-	tasks, total, err := srv.tasksRepo.GetAll(ctx, user.ID, req.ListID, req.Page, req.PageSize, req.Sort, req.Content, req.IsCompleted)
+	pageSize := min(req.PageSize, srv.MaxQuery)
+	tasks, total, err := srv.tasksRepo.GetAll(ctx, user.ID, req.ListID, req.Page, pageSize, req.Sort, req.Content, req.IsCompleted)
 	if err != nil {
 		return ports.GetTasksResponse{}, fmt.Errorf("'tasksRepo.GetAll' failed: %w", err)
 	}

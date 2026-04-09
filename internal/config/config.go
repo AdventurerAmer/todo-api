@@ -63,11 +63,17 @@ type Authentication struct {
 type Constants struct {
 	NameMaxChars     int
 	PasswordHashCost int
+	PasswordMinChars int
+	PasswordMaxChars int
 
 	TitleMaxChars       int
 	DescriptionMaxChars int
 
-	ContentMaxChars int
+	ContentMaxChars   int
+	ListsDefaultQuery int
+	ListsMaxQuery     int
+	TasksDefaultQuery int
+	TasksMaxQuery     int
 }
 
 func Load() (*Config, error) {
@@ -126,11 +132,16 @@ func Load() (*Config, error) {
 	cfg.Authentication.JWTTokenExpiresAfter, err = loadDuration("TODO_AUTHENTICATION_JWT_EXPIRES_AFTER")
 
 	cfg.Constants.NameMaxChars, err = loadInt("TODO_NAME_MAX_CHARS")
+	cfg.Constants.PasswordMinChars, err = loadInt("TODO_PASSWORD_MIN_CHARS")
+	cfg.Constants.PasswordMaxChars, err = loadInt("TODO_PASSWORD_MAX_CHARS")
 	cfg.Constants.PasswordHashCost, err = loadInt("TODO_PASSWORD_HASH_COST")
 
 	cfg.Constants.TitleMaxChars, err = loadInt("TODO_TITLE_MAX_CHARS")
 	cfg.Constants.DescriptionMaxChars, err = loadInt("TODO_DESCRIPTION_MAX_CHARS")
-
+	cfg.Constants.ListsDefaultQuery, err = loadInt("TODO_LISTS_DEFAULT_QUERY")
+	cfg.Constants.ListsMaxQuery, err = loadInt("TODO_LISTS_MAX_QUERY")
+	cfg.Constants.TasksDefaultQuery, err = loadInt("TODO_TASKS_DEFAULT_QUERY")
+	cfg.Constants.TasksMaxQuery, err = loadInt("TODO_TASKS_MAX_QUERY")
 	if err != nil {
 		return nil, fmt.Errorf("parsing config failed: %w", err)
 	}

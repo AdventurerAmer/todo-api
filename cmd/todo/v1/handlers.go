@@ -225,7 +225,7 @@ func (app *application) getListsHandler(w http.ResponseWriter, r *http.Request) 
 	v := failures.NewValidator()
 
 	page := web.QueryInt(r, v, "page", 1)
-	pageSize := web.QueryInt(r, v, "page_size", 20) // TODO: hardcoding...
+	pageSize := web.QueryInt(r, v, "page_size", app.config.Constants.ListsDefaultQuery)
 	sort := web.Query(r, v, "sort", "created_at")
 	title := web.Query(r, v, "title", "")
 	if err := v.Err(); err != nil {
@@ -354,7 +354,7 @@ func (app *application) getTasksHandler(w http.ResponseWriter, r *http.Request) 
 
 	id := web.Path(r, v, "id")
 	page := web.QueryInt(r, v, "page", 1)
-	pageSize := web.QueryInt(r, v, "page_size", 20) // TODO: hardcoding...
+	pageSize := web.QueryInt(r, v, "page_size", app.config.Constants.TasksDefaultQuery)
 	sort := web.Query(r, v, "sort", "created_at")
 	content := web.Query(r, v, "content", "")
 	isCompleted := web.QueryBool(r, v, "is_completed")
