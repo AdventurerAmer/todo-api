@@ -69,6 +69,11 @@ type Constants struct {
 
 	ActivationTokenExpiresAfter time.Duration
 
+	QueueEmailTimeout      time.Duration
+	QueueEmailMaxRetries   int
+	QueueEmailMaxRetryTime time.Duration
+	SendEmailTimeout       time.Duration
+
 	TitleMaxChars       int
 	DescriptionMaxChars int
 
@@ -144,6 +149,11 @@ func Load() (*Config, error) {
 	cfg.Constants.PasswordMaxChars, err = loadInt("TODO_PASSWORD_MAX_CHARS")
 	cfg.Constants.PasswordHashCost, err = loadInt("TODO_PASSWORD_HASH_COST")
 	cfg.Constants.ActivationTokenExpiresAfter, err = loadDuration("TODO_ACTIVATION_TOKEN_EXPIRES_AFTER")
+
+	cfg.Constants.QueueEmailTimeout, err = loadDuration("QUEUE_EMAIL_TIMEOUT")
+	cfg.Constants.QueueEmailMaxRetries, err = loadInt("QUEUE_EMAIL_MAX_RETRIES")
+	cfg.Constants.QueueEmailMaxRetryTime, err = loadDuration("QUEUE_EMAIL_MAX_RETRY_TIME")
+	cfg.Constants.SendEmailTimeout, err = loadDuration("SEND_EMAIL_TIMEOUT")
 
 	cfg.Constants.TitleMaxChars, err = loadInt("TODO_TITLE_MAX_CHARS")
 	cfg.Constants.DescriptionMaxChars, err = loadInt("TODO_DESCRIPTION_MAX_CHARS")

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/AdventurerAmer/todo-api/failures"
@@ -19,19 +18,19 @@ type Config struct {
 
 type service struct {
 	Config
-	usersRepo  ports.UsersRepository
-	tokensRepo ports.TokensRepository
-	broker     ports.Broker
+	usersRepo   ports.UsersRepository
+	tokensRepo  ports.TokensRepository
+	emailSender *ports.EmailSender
 }
 
 func New(usersRepo ports.UsersRepository,
 	tokensRepo ports.TokensRepository,
-	broker ports.Broker, cfg Config) ports.TokensService {
+	emailSender *ports.EmailSender, cfg Config) ports.TokensService {
 	return &service{
-		Config:     cfg,
-		usersRepo:  usersRepo,
-		tokensRepo: tokensRepo,
-		broker:     broker,
+		Config:      cfg,
+		usersRepo:   usersRepo,
+		tokensRepo:  tokensRepo,
+		emailSender: emailSender,
 	}
 }
 
@@ -59,19 +58,8 @@ func (srv *service) ActivateViaEmail(ctx context.Context, user domain.User) (por
 			Code: id,
 		},
 	}
-	go func() {
-		// TODO: better retry
-		for range 10 {
-			ctx, cancel := context.WithTimeout(context.TODO(), time.Second) // TODO: hardcoding
-			defer cancel()
+	srv.emailSender.SendAsync(sendEmailMessage)
 
-			if err := ports.SendEmail(ctx, srv.broker, sendEmailMessage); err != nil {
-				slog.Error("send email failed", "error", err)
-			} else {
-				break
-			}
-		}
-	}()
 	resp := ports.ActivateViaEmailResponse{
 		Message: fmt.Sprintf("we have sent an activation code to your email: %s", user.Email),
 	}

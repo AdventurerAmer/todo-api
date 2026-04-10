@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
+	"time"
 
 	"github.com/AdventurerAmer/todo-api/internal/core/domain"
+	"github.com/AdventurerAmer/todo-api/internal/utils"
 )
 
 type Queue string
@@ -16,7 +19,7 @@ const (
 
 var Queues = []Queue{EmailQueue}
 
-type ConsumeHandler = func(contentType string, data []byte) (bool, error)
+type ConsumeHandler = func(ctx context.Context, contentType string, data []byte) (bool, error)
 
 type Broker interface {
 	Publish(ctx context.Context, queue Queue, contentType string, data []byte) error
@@ -30,15 +33,30 @@ type SendEmailRequest struct {
 	Data     any             `json:"data"`
 }
 
-func SendEmail(ctx context.Context, broker Broker, req SendEmailRequest) error {
-	b, err := json.Marshal(req)
-	if err != nil {
-		return fmt.Errorf("'json.Marshal' failed: %w", err)
-	}
+type EmailSender struct {
+	Context      context.Context
+	Broker       Broker
+	Timeout      time.Duration
+	MaxRetries   int
+	MaxRetryTime time.Duration
+}
 
-	if err := broker.Publish(ctx, EmailQueue, "application/json", b); err != nil {
-		return fmt.Errorf("'broker.Publish' failed: %w", err)
-	}
-
-	return nil
+func (s EmailSender) SendAsync(req SendEmailRequest) {
+	go func() {
+		data, err := json.Marshal(req)
+		if err != nil {
+			slog.Error("send email failed", "userID", req.UserID, "template", req.Template, "error", err)
+			return
+		}
+		handler := func(ctx context.Context) (bool, error) {
+			err := s.Broker.Publish(s.Context, EmailQueue, "application/json", data)
+			if err != nil {
+				return true, fmt.Errorf("'Publish' failed: %w", err)
+			}
+			return false, nil
+		}
+		if err := utils.Retry(s.Context, handler, s.Timeout, s.MaxRetries, s.MaxRetryTime); err != nil {
+			slog.Error("send email failed", "userID", req.UserID, "template", req.Template, "error", err)
+		}
+	}()
 }

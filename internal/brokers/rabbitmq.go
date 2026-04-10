@@ -54,7 +54,7 @@ func (r *rmq) Consume(ctx context.Context, queue ports.Queue, handler ports.Cons
 			if !ok {
 				return nil
 			}
-			requeue, err := handler(msg.ContentType, msg.Body)
+			requeue, err := handler(ctx, msg.ContentType, msg.Body)
 			if err != nil {
 				slog.Error("request failed", "err", err)
 				if err := msg.Nack(false, requeue); err != nil {

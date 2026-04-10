@@ -84,10 +84,21 @@ func Run() int {
 
 	tokensRepo := tokensrepo.NewRedis(tokensCache)
 
+	emailSenderCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	emailSender := &ports.EmailSender{
+		Context:      emailSenderCtx,
+		Broker:       mainBroker,
+		Timeout:      cfg.Constants.QueueEmailTimeout,
+		MaxRetries:   cfg.Constants.QueueEmailMaxRetries,
+		MaxRetryTime: cfg.Constants.QueueEmailMaxRetryTime,
+	}
+
 	tokensServiceCfg := tokenssrv.Config{
 		ActivationTokenExpiresAfter: cfg.Constants.ActivationTokenExpiresAfter,
 	}
-	tokensService := tokenssrv.New(usersRepo, tokensRepo, mainBroker, tokensServiceCfg)
+	tokensService := tokenssrv.New(usersRepo, tokensRepo, emailSender, tokensServiceCfg)
 
 	usersServiceConfig := userssrv.Config{
 		NameMaxChars:     cfg.Constants.NameMaxChars,

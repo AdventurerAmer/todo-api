@@ -8,7 +8,8 @@ import (
 	"fmt"
 	"html/template"
 	"log/slog"
-	"time"
+	"os/signal"
+	"syscall"
 
 	"github.com/AdventurerAmer/todo-api/failures"
 	"github.com/AdventurerAmer/todo-api/infrastructure"
@@ -61,11 +62,14 @@ func Run(templatesFS embed.FS) int {
 
 	slog.Info("connected to main broker")
 
+	sigCtx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
 	mailer := utils.NewMailer(cfg.MailServer.Host, cfg.MailServer.Port, cfg.MailServer.Username, cfg.MailServer.Password, cfg.MailServer.Sender)
 
 	usersRepo := usersrepo.NewPostgres(db)
 
-	handler := func(contentType string, data []byte) (bool, error) {
+	handler := func(ctx context.Context, contentType string, data []byte) (bool, error) {
 		if contentType != "application/json" {
 			return false, &failures.UnsupportedMediaTypeError{Type: contentType}
 		}
@@ -83,10 +87,10 @@ func Run(templatesFS embed.FS) int {
 			return false, fmt.Errorf("unsupported template %q", req.Template)
 		}
 
-		ctx, cancel := context.WithTimeout(context.TODO(), 10*time.Second) // TODO: hardcoding
+		dctx, cancel := context.WithTimeout(ctx, cfg.Constants.SendEmailTimeout)
 		defer cancel()
 
-		user, err := usersRepo.Get(ctx, req.UserID)
+		user, err := usersRepo.Get(dctx, req.UserID)
 		if err != nil {
 			if errors.Is(err, ports.ErrUserNotFound) {
 				return false, err
@@ -101,7 +105,7 @@ func Run(templatesFS embed.FS) int {
 
 		return false, nil
 	}
-	if err := mainBroker.Consume(context.TODO(), ports.EmailQueue, handler); err != nil {
+	if err := mainBroker.Consume(sigCtx, ports.EmailQueue, handler); err != nil {
 		slog.Error("consume failed", "error", err)
 		return 1
 	}
