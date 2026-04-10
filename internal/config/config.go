@@ -29,6 +29,7 @@ type Config struct {
 	Server         ServerConfig
 	MainDB         infrastructure.PostgresConfig
 	TokensCache    infrastructure.RedisConfig
+	MainBroker     infrastructure.RabbitMQConfig
 	MailServer     MailServer
 	Authentication Authentication
 	Constants      Constants
@@ -65,6 +66,8 @@ type Constants struct {
 	PasswordHashCost int
 	PasswordMinChars int
 	PasswordMaxChars int
+
+	ActivationTokenExpiresAfter time.Duration
 
 	TitleMaxChars       int
 	DescriptionMaxChars int
@@ -122,6 +125,11 @@ func Load() (*Config, error) {
 	cfg.TokensCache.DB, err = loadInt("TODO_TOKENS_CACHE_DB")
 	cfg.TokensCache.PingTimeout, err = loadDuration("TODO_TOKENS_CACHE_TIMEOUT")
 
+	cfg.MainBroker.Addr, err = loadString("TODO_MAIN_BROKER_ADDR")
+	cfg.MainBroker.Username, err = loadString("TODO_MAIN_BROKER_USERNAME")
+	cfg.MainBroker.Password, err = loadString("TODO_MAIN_BROKER_PASSWORD")
+	cfg.MainBroker.ConnectionTimeout, err = loadDuration("TODO_MAIN_BROKER_CONNECTION_TIMEOUT")
+
 	cfg.MailServer.Host, err = loadString("TODO_MAIL_SERVER_HOST")
 	cfg.MailServer.Port, err = loadInt("TODO_MAIL_SERVER_PORT")
 	cfg.MailServer.Username, err = loadString("TODO_MAIL_SERVER_USERNAME")
@@ -135,6 +143,7 @@ func Load() (*Config, error) {
 	cfg.Constants.PasswordMinChars, err = loadInt("TODO_PASSWORD_MIN_CHARS")
 	cfg.Constants.PasswordMaxChars, err = loadInt("TODO_PASSWORD_MAX_CHARS")
 	cfg.Constants.PasswordHashCost, err = loadInt("TODO_PASSWORD_HASH_COST")
+	cfg.Constants.ActivationTokenExpiresAfter, err = loadDuration("TODO_ACTIVATION_TOKEN_EXPIRES_AFTER")
 
 	cfg.Constants.TitleMaxChars, err = loadInt("TODO_TITLE_MAX_CHARS")
 	cfg.Constants.DescriptionMaxChars, err = loadInt("TODO_DESCRIPTION_MAX_CHARS")
@@ -152,7 +161,7 @@ func Load() (*Config, error) {
 func loadString(key string) (string, error) {
 	val, ok := os.LookupEnv(key)
 	if !ok {
-		return "", ErrKeyNotFound
+		return "", fmt.Errorf("%s: %w", key, ErrKeyNotFound)
 	}
 	return val, nil
 }
@@ -160,7 +169,7 @@ func loadString(key string) (string, error) {
 func loadInt(key string) (int, error) {
 	s, ok := os.LookupEnv(key)
 	if !ok {
-		return 0, ErrKeyNotFound
+		return 0, fmt.Errorf("%s: %w", key, ErrKeyNotFound)
 	}
 	val, err := strconv.Atoi(s)
 	if err != nil {
@@ -172,7 +181,7 @@ func loadInt(key string) (int, error) {
 func loadDuration(key string) (time.Duration, error) {
 	s, ok := os.LookupEnv(key)
 	if !ok {
-		return 0, ErrKeyNotFound
+		return 0, fmt.Errorf("%s: %w", key, ErrKeyNotFound)
 	}
 	val, err := time.ParseDuration(s)
 	if err != nil {
@@ -184,7 +193,7 @@ func loadDuration(key string) (time.Duration, error) {
 func loadBool(key string) (bool, error) {
 	s, ok := os.LookupEnv(key)
 	if !ok {
-		return false, ErrKeyNotFound
+		return false, fmt.Errorf("%s: %w", key, ErrKeyNotFound)
 	}
 	val := strings.ToLower(s)
 	switch val {
@@ -199,7 +208,7 @@ func loadBool(key string) (bool, error) {
 func loadStringSlice(key string, sep string) ([]string, error) {
 	s, ok := os.LookupEnv(key)
 	if !ok {
-		return nil, ErrKeyNotFound
+		return nil, fmt.Errorf("%s: %w", key, ErrKeyNotFound)
 	}
 	fields := strings.Split(s, sep)
 	return fields, nil

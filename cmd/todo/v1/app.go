@@ -3,7 +3,6 @@ package v1
 import (
 	"context"
 	"crypto/tls"
-	"embed"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -13,6 +12,7 @@ import (
 	"syscall"
 
 	"github.com/AdventurerAmer/todo-api/infrastructure"
+	"github.com/AdventurerAmer/todo-api/internal/brokers"
 	"github.com/AdventurerAmer/todo-api/internal/config"
 	"github.com/AdventurerAmer/todo-api/internal/core/ports"
 	"github.com/AdventurerAmer/todo-api/internal/core/services/listssrv"
@@ -24,7 +24,6 @@ import (
 	"github.com/AdventurerAmer/todo-api/internal/repositories/tasksrepo"
 	"github.com/AdventurerAmer/todo-api/internal/repositories/tokensrepo"
 	"github.com/AdventurerAmer/todo-api/internal/repositories/usersrepo"
-	"github.com/AdventurerAmer/todo-api/internal/utils"
 	"github.com/AdventurerAmer/todo-api/web"
 )
 
@@ -40,9 +39,11 @@ type application struct {
 	tasksService     ports.TasksService
 	tokensService    ports.TokensService
 	tokenAuthService ports.TokenAuthService
+
+	mainBroker ports.Broker
 }
 
-func Run(templates embed.FS) int {
+func Run() int {
 	cfg, err := config.Load()
 	if err != nil {
 		slog.Error("config loading failed", "error", err)
@@ -51,7 +52,7 @@ func Run(templates embed.FS) int {
 
 	db, err := infrastructure.ConnectToPostgres(cfg.MainDB)
 	if err != nil {
-		slog.Error("database connection failed", "error", err)
+		slog.Error("main database connection failed", "error", err)
 		return 1
 	}
 
@@ -65,15 +66,34 @@ func Run(templates embed.FS) int {
 
 	slog.Info("connected to cache")
 
-	mailer :=
-		utils.NewMailer(cfg.MailServer.Host, cfg.MailServer.Port, cfg.MailServer.Username, cfg.MailServer.Password, cfg.MailServer.Sender)
+	conn, err := infrastructure.ConnectToRabbitMQ(cfg.MainBroker)
+	if err != nil {
+		slog.Error("main broker connection failed", "error", err)
+		return 1
+	}
+
+	slog.Info("connected to main broker")
+
+	mainBroker, err := brokers.NewRabbitMQ(conn)
+	if err != nil {
+		slog.Error("main broker creation failed", "error", err)
+		return 1
+	}
 
 	usersRepo := usersrepo.NewPostgres(db)
+
+	tokensRepo := tokensrepo.NewRedis(tokensCache)
+
+	tokensServiceCfg := tokenssrv.Config{
+		ActivationTokenExpiresAfter: cfg.Constants.ActivationTokenExpiresAfter,
+	}
+	tokensService := tokenssrv.New(usersRepo, tokensRepo, mainBroker, tokensServiceCfg)
+
 	usersServiceConfig := userssrv.Config{
 		NameMaxChars:     cfg.Constants.NameMaxChars,
 		PasswordHashCost: cfg.Constants.PasswordHashCost,
 	}
-	usersService := userssrv.New(usersRepo, templates, mailer, usersServiceConfig)
+	usersService := userssrv.New(usersRepo, tokensService, usersServiceConfig)
 
 	listsRepo := listsrepo.NewPostgres(db)
 	listsServiceConfig := listssrv.Config{
@@ -87,10 +107,6 @@ func Run(templates embed.FS) int {
 		ContentMaxChars: cfg.Constants.ContentMaxChars,
 	}
 	tasksService := taskssrv.New(tasksRepo, tasksServiceConfig)
-
-	tokensRepo := tokensrepo.NewRedis(tokensCache)
-
-	tokensService := tokenssrv.New(usersRepo, tokensRepo, templates, mailer)
 
 	tokenauthsrvCfg := tokenauthsrv.JWTConfig{
 		Secret:            cfg.Authentication.JWTSecret,
@@ -123,6 +139,8 @@ func Run(templates embed.FS) int {
 		tasksService:     tasksService,
 		tokensService:    tokensService,
 		tokenAuthService: tokenAuthService,
+
+		mainBroker: mainBroker,
 	}
 
 	tlsConfig := &tls.Config{

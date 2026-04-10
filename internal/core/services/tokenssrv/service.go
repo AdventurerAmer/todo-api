@@ -4,33 +4,33 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"html/template"
-	"io/fs"
 	"time"
 
 	"github.com/AdventurerAmer/todo-api/failures"
 	"github.com/AdventurerAmer/todo-api/internal/core/domain"
 	"github.com/AdventurerAmer/todo-api/internal/core/ports"
-	"github.com/AdventurerAmer/todo-api/internal/utils"
 	"github.com/google/uuid"
 )
 
+type Config struct {
+	ActivationTokenExpiresAfter time.Duration
+}
+
 type service struct {
+	Config
 	usersRepo  ports.UsersRepository
 	tokensRepo ports.TokensRepository
-	templates  fs.FS
-	mailer     *utils.Mailer
+	broker     ports.Broker
 }
 
 func New(usersRepo ports.UsersRepository,
 	tokensRepo ports.TokensRepository,
-	templates fs.FS,
-	mailer *utils.Mailer) ports.TokensService {
+	broker ports.Broker, cfg Config) ports.TokensService {
 	return &service{
+		Config:     cfg,
 		usersRepo:  usersRepo,
 		tokensRepo: tokensRepo,
-		templates:  templates,
-		mailer:     mailer,
+		broker:     broker,
 	}
 }
 
@@ -40,28 +40,26 @@ func (srv *service) ActivateViaEmail(ctx context.Context, user domain.User) (por
 		return resp, nil
 	}
 
-	tmpl, err := template.ParseFS(srv.templates, "templates/*.gotmpl")
-	if err != nil {
-		err := fmt.Errorf("'template.ParseFS' failed: %w", err)
-		return ports.ActivateViaEmailResponse{}, err
-	}
 	id := uuid.NewString()
-	data := map[string]any{
-		"code": id,
-	}
 	token := &domain.Token{
 		ID:        id,
 		UserID:    user.ID,
-		ExpiresAt: time.Now().Add(10 * time.Minute), // TODO: hardcoding
+		ExpiresAt: time.Now().Add(srv.ActivationTokenExpiresAfter),
 		Scope:     domain.TokenScopeActivation,
 	}
 	if err := srv.tokensRepo.Create(ctx, token); err != nil {
 		return ports.ActivateViaEmailResponse{}, fmt.Errorf("'tokensRepo.Create' failed: %w", err)
 	}
-	if err := srv.mailer.Send(user.Email, tmpl, data); err != nil {
-		err := fmt.Errorf("'mailer.Send' failed: %w", err)
-		return ports.ActivateViaEmailResponse{}, err
+
+	sendEmailMessage := ports.SendEmailRequest{
+		UserID:   user.ID,
+		Template: "UserActivation",
+		Data: map[string]any{
+			"code": id,
+		},
 	}
+	go ports.SendEmail(srv.broker, sendEmailMessage)
+
 	resp := ports.ActivateViaEmailResponse{
 		Message: fmt.Sprintf("we have sent an activation code to your email: %s", user.Email),
 	}

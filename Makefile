@@ -6,6 +6,14 @@ build:
 run: build
 	@./bin/todo
 
+.PHONY: build_email_worker
+build_email_worker:
+	@go build -o ./bin/email_worker ./cmd/emailworker
+
+.PHONY: run_email_worker
+run_email_worker: build_email_worker
+	@./bin/email_worker
+
 TODO_MAIN_DB_DSN := postgres://${TODO_MAIN_DB_USERNAME}:${TODO_MAIN_DB_PASSWORD}@${TODO_MAIN_DB_HOST}:${TODO_MAIN_DB_PORT}/${TODO_MAIN_DB_NAME}?sslmode=${TODO_MAIN_DB_SSL_MODE}
 
 .PHONY: psql

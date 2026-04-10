@@ -2,6 +2,7 @@ package utils
 
 import (
 	"bytes"
+	"fmt"
 	"html/template"
 
 	"github.com/go-mail/mail/v2"
@@ -22,19 +23,16 @@ func NewMailer(host string, port int, username string, password string, sender s
 
 func (m *Mailer) Send(to string, tmpl *template.Template, data any) error {
 	var subject bytes.Buffer
-	err := tmpl.ExecuteTemplate(&subject, "subject", data)
-	if err != nil {
-		return err
+	if err := tmpl.ExecuteTemplate(&subject, "subject", data); err != nil {
+		return fmt.Errorf("'tmpl.ExecuteTemplate' for 'subject' failed: %w", err)
 	}
 	var plainBody bytes.Buffer
-	err = tmpl.ExecuteTemplate(&plainBody, "plainBody", data)
-	if err != nil {
-		return err
+	if err := tmpl.ExecuteTemplate(&plainBody, "plainBody", data); err != nil {
+		return fmt.Errorf("'tmpl.ExecuteTemplate' for 'plainBody' failed: %w", err)
 	}
 	var htmlBody bytes.Buffer
-	err = tmpl.ExecuteTemplate(&htmlBody, "htmlBody", data)
-	if err != nil {
-		return err
+	if err := tmpl.ExecuteTemplate(&htmlBody, "htmlBody", data); err != nil {
+		return fmt.Errorf("'tmpl.ExecuteTemplate' for 'htmlBody' failed: %w", err)
 	}
 
 	msg := mail.NewMessage()
@@ -44,11 +42,9 @@ func (m *Mailer) Send(to string, tmpl *template.Template, data any) error {
 	msg.SetBody("text/plain", plainBody.String())
 	msg.SetBody("text/html", htmlBody.String())
 
-	for i := 0; i < 3; i++ {
-		err = m.dailer.DialAndSend(msg)
-		if err == nil {
-			break
-		}
+	if err := m.dailer.DialAndSend(msg); err != nil {
+		return fmt.Errorf("'dailer.DialAndSend' failed: %w", err)
 	}
-	return err
+
+	return nil
 }

@@ -2,16 +2,12 @@ package userssrv
 
 import (
 	"context"
-	"embed"
 	"fmt"
-	"html/template"
-	"math/rand/v2"
 	"unicode/utf8"
 
 	"github.com/AdventurerAmer/todo-api/failures"
 	"github.com/AdventurerAmer/todo-api/internal/core/domain"
 	"github.com/AdventurerAmer/todo-api/internal/core/ports"
-	"github.com/AdventurerAmer/todo-api/internal/utils"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -27,17 +23,15 @@ type Config struct {
 
 type service struct {
 	Config
-	usersRepo ports.UsersRepository
-	templates embed.FS
-	mailer    *utils.Mailer
+	usersRepo     ports.UsersRepository
+	tokensService ports.TokensService
 }
 
-func New(usersRepo ports.UsersRepository, templates embed.FS, mailer *utils.Mailer, config Config) ports.UsersService {
+func New(usersRepo ports.UsersRepository, tokensService ports.TokensService, config Config) ports.UsersService {
 	return &service{
-		Config:    config,
-		usersRepo: usersRepo,
-		templates: templates,
-		mailer:    mailer,
+		Config:        config,
+		usersRepo:     usersRepo,
+		tokensService: tokensService,
 	}
 }
 
@@ -55,6 +49,7 @@ func (srv *service) Create(ctx context.Context, req ports.CreateUserRequest) (po
 		return ports.CreateUserResponse{}, fmt.Errorf("'bcrypt.GenerateFromPassword' failed: %w", err)
 	}
 
+	// TODO: combine the two into a transaction
 	user := &domain.User{
 		Name:         req.Name,
 		Email:        req.Email,
@@ -64,18 +59,14 @@ func (srv *service) Create(ctx context.Context, req ports.CreateUserRequest) (po
 		return ports.CreateUserResponse{}, fmt.Errorf("'usersRepo.Create' failed: %w", err)
 	}
 
-	tmpl, err := template.ParseFS(srv.templates, "templates/*.gotmpl")
+	activateResp, err := srv.tokensService.ActivateViaEmail(ctx, *user)
 	if err != nil {
-		return ports.CreateUserResponse{}, fmt.Errorf("' template.ParseFS' failed: %w", err)
+		return ports.CreateUserResponse{}, fmt.Errorf("'tokensService.ActivateViaEmail' failed: %w", err)
 	}
-	code := uint16(rand.Uint())
-	data := map[string]any{"code": code}
-	if err := srv.mailer.Send(user.Email, tmpl, data); err != nil {
-		return ports.CreateUserResponse{}, err
-	}
+
 	resp := ports.CreateUserResponse{
 		User:    user,
-		Message: fmt.Sprintf("we have sent an activation code to your email: %s", user.Email),
+		Message: activateResp.Message,
 	}
 	return resp, nil
 }
