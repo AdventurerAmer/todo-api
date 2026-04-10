@@ -14,6 +14,7 @@ import (
 	"github.com/AdventurerAmer/todo-api/infrastructure"
 	"github.com/AdventurerAmer/todo-api/internal/brokers"
 	"github.com/AdventurerAmer/todo-api/internal/config"
+	"github.com/AdventurerAmer/todo-api/internal/core/domain"
 	"github.com/AdventurerAmer/todo-api/internal/core/ports"
 	"github.com/AdventurerAmer/todo-api/internal/repositories/usersrepo"
 	"github.com/AdventurerAmer/todo-api/internal/utils"
@@ -26,6 +27,10 @@ func Run(templatesFS embed.FS) int {
 	if err != nil {
 		slog.Error("parsing templates failed", "error", err)
 		return 1
+	}
+
+	templates := map[domain.Template]*template.Template{
+		domain.UserActivationTemplate: userActivationTmpl,
 	}
 
 	cfg, err := config.Load()
@@ -73,8 +78,9 @@ func Run(templatesFS embed.FS) int {
 			return false, fmt.Errorf("'userID' is empty")
 		}
 
-		if req.Template == "" {
-			return false, fmt.Errorf("'template' is empty")
+		tmpl, ok := templates[req.Template]
+		if !ok {
+			return false, fmt.Errorf("unsupported template %q", req.Template)
 		}
 
 		ctx, cancel := context.WithTimeout(context.TODO(), 10*time.Second) // TODO: hardcoding
@@ -86,14 +92,6 @@ func Run(templatesFS embed.FS) int {
 				return false, err
 			}
 			return true, fmt.Errorf("'usersRepo.Get' failed: %w", err)
-		}
-
-		var tmpl *template.Template
-		switch req.Template {
-		case "UserActivation":
-			tmpl = userActivationTmpl
-		default:
-			return false, fmt.Errorf("unsupported template")
 		}
 
 		if err := mailer.Send(user.Email, tmpl, data); err != nil {

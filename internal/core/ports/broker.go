@@ -3,8 +3,9 @@ package ports
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
-	"time"
+	"fmt"
+
+	"github.com/AdventurerAmer/todo-api/internal/core/domain"
 )
 
 type Queue string
@@ -24,20 +25,20 @@ type Broker interface {
 }
 
 type SendEmailRequest struct {
-	UserID   string `json:"userID"`
-	Template string `json:"template"`
-	Data     any    `json:"data"`
+	UserID   string          `json:"userID"`
+	Template domain.Template `json:"template"`
+	Data     any             `json:"data"`
 }
 
-func SendEmail(broker Broker, req SendEmailRequest) {
+func SendEmail(ctx context.Context, broker Broker, req SendEmailRequest) error {
 	b, err := json.Marshal(req)
 	if err != nil {
-		slog.Error("queue send email request failed", "error", err)
-		return
+		return fmt.Errorf("'json.Marshal' failed: %w", err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second) // TOOD: hardcoding
-	defer cancel()
+
 	if err := broker.Publish(ctx, EmailQueue, "application/json", b); err != nil {
-		slog.Error("queue send email request failed", "error", err)
+		return fmt.Errorf("'broker.Publish' failed: %w", err)
 	}
+
+	return nil
 }

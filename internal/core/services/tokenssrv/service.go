@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/AdventurerAmer/todo-api/failures"
@@ -53,13 +54,24 @@ func (srv *service) ActivateViaEmail(ctx context.Context, user domain.User) (por
 
 	sendEmailMessage := ports.SendEmailRequest{
 		UserID:   user.ID,
-		Template: "UserActivation",
-		Data: map[string]any{
-			"code": id,
+		Template: domain.UserActivationTemplate,
+		Data: domain.UserActivationTemplateData{
+			Code: id,
 		},
 	}
-	go ports.SendEmail(srv.broker, sendEmailMessage)
+	go func() {
+		// TODO: better retry
+		for range 10 {
+			ctx, cancel := context.WithTimeout(context.TODO(), time.Second) // TODO: hardcoding
+			defer cancel()
 
+			if err := ports.SendEmail(ctx, srv.broker, sendEmailMessage); err != nil {
+				slog.Error("send email failed", "error", err)
+			} else {
+				break
+			}
+		}
+	}()
 	resp := ports.ActivateViaEmailResponse{
 		Message: fmt.Sprintf("we have sent an activation code to your email: %s", user.Email),
 	}
