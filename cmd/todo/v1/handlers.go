@@ -11,7 +11,7 @@ import (
 	"github.com/AdventurerAmer/todo-api/web"
 )
 
-func (app *application) healthCheckHandler(w http.ResponseWriter, r *http.Request) {
+func (app *application) health(w http.ResponseWriter, r *http.Request) {
 	resp := struct {
 		Status      string             `json:"status"`
 		Environment config.Environment `json:"env"`
@@ -24,7 +24,7 @@ func (app *application) healthCheckHandler(w http.ResponseWriter, r *http.Reques
 	web.WriteJSON(w, resp, http.StatusOK)
 }
 
-func (app *application) authenticateUserHandler(w http.ResponseWriter, r *http.Request) {
+func (app *application) authenticateUser(w http.ResponseWriter, r *http.Request) {
 	var req ports.CreateAuthTokenRequest
 	if err := web.ReadJSON(r, &req); err != nil {
 		err := fmt.Errorf("'web.ReadJSON' failed: %w", err)
@@ -45,7 +45,7 @@ func (app *application) authenticateUserHandler(w http.ResponseWriter, r *http.R
 	web.WriteJSON(w, resp, http.StatusCreated)
 }
 
-func (app *application) createUserHandler(w http.ResponseWriter, r *http.Request) {
+func (app *application) createUser(w http.ResponseWriter, r *http.Request) {
 	var req ports.CreateUserRequest
 	if err := web.ReadJSON(r, &req); err != nil {
 		err := fmt.Errorf("'web.ReadJSON' failed: %w", err)
@@ -66,7 +66,7 @@ func (app *application) createUserHandler(w http.ResponseWriter, r *http.Request
 	web.WriteJSON(w, resp, http.StatusCreated)
 }
 
-func (app *application) updateUserHandler(w http.ResponseWriter, r *http.Request) {
+func (app *application) updateUser(w http.ResponseWriter, r *http.Request) {
 	var req ports.UpdateUserRequest
 	if err := web.ReadJSON(r, &req); err != nil {
 		err := fmt.Errorf("'web.ReadJSON' failed: %w", err)
@@ -89,13 +89,13 @@ func (app *application) updateUserHandler(w http.ResponseWriter, r *http.Request
 	web.WriteJSON(w, resp, http.StatusOK)
 }
 
-func (app *application) getUserHandler(w http.ResponseWriter, r *http.Request) {
+func (app *application) getUser(w http.ResponseWriter, r *http.Request) {
 	user, _ := getUserFromCtx(r.Context())
 	resp := map[string]any{"user": user}
 	web.WriteJSON(w, resp, http.StatusOK)
 }
 
-func (app *application) deleteUserHandler(w http.ResponseWriter, r *http.Request) {
+func (app *application) deleteUser(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
 	defer cancel()
 
@@ -110,7 +110,7 @@ func (app *application) deleteUserHandler(w http.ResponseWriter, r *http.Request
 	web.WriteJSON(w, resp, http.StatusOK)
 }
 
-func (app *application) sendActivationCodeHandler(w http.ResponseWriter, r *http.Request) {
+func (app *application) sendActivationCode(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
 	defer cancel()
 
@@ -126,7 +126,7 @@ func (app *application) sendActivationCodeHandler(w http.ResponseWriter, r *http
 	web.WriteJSON(w, resp, http.StatusOK)
 }
 
-func (app *application) activateUserHandler(w http.ResponseWriter, r *http.Request) {
+func (app *application) activateUser(w http.ResponseWriter, r *http.Request) {
 	var req ports.ActivateUserRequest
 	if err := web.ReadJSON(r, &req); err != nil {
 		err := fmt.Errorf("'web.ReadJSON' failed: %w", err)
@@ -147,7 +147,7 @@ func (app *application) activateUserHandler(w http.ResponseWriter, r *http.Reque
 	web.WriteJSON(w, resp, http.StatusOK)
 }
 
-func (app *application) createListHandler(w http.ResponseWriter, r *http.Request) {
+func (app *application) createList(w http.ResponseWriter, r *http.Request) {
 	var req ports.CreateListRequest
 	if err := web.ReadJSON(r, &req); err != nil {
 		err := fmt.Errorf("'web.ReadJSON' failed: %w", err)
@@ -168,7 +168,7 @@ func (app *application) createListHandler(w http.ResponseWriter, r *http.Request
 	web.WriteJSON(w, resp, http.StatusCreated)
 }
 
-func (app *application) updateListHandler(w http.ResponseWriter, r *http.Request) {
+func (app *application) updateList(w http.ResponseWriter, r *http.Request) {
 	v := failures.NewValidator()
 	id := web.Query(r, v, "id", "")
 
@@ -198,7 +198,7 @@ func (app *application) updateListHandler(w http.ResponseWriter, r *http.Request
 	web.WriteJSON(w, resp, http.StatusOK)
 }
 
-func (app *application) getListHandler(w http.ResponseWriter, r *http.Request) {
+func (app *application) getList(w http.ResponseWriter, r *http.Request) {
 	v := failures.NewValidator()
 	id := web.Path(r, v, "id")
 	if err := v.Err(); err != nil {
@@ -221,7 +221,7 @@ func (app *application) getListHandler(w http.ResponseWriter, r *http.Request) {
 	web.WriteJSON(w, resp, http.StatusOK)
 }
 
-func (app *application) getListsHandler(w http.ResponseWriter, r *http.Request) {
+func (app *application) getLists(w http.ResponseWriter, r *http.Request) {
 	v := failures.NewValidator()
 
 	page := web.QueryInt(r, v, "page", 1)
@@ -253,7 +253,7 @@ func (app *application) getListsHandler(w http.ResponseWriter, r *http.Request) 
 	web.WriteJSON(w, resp, http.StatusOK)
 }
 
-func (app *application) deleteListandler(w http.ResponseWriter, r *http.Request) {
+func (app *application) deleteList(w http.ResponseWriter, r *http.Request) {
 	v := failures.NewValidator()
 	id := web.Path(r, v, "id")
 	if err := v.Err(); err != nil {
@@ -275,7 +275,7 @@ func (app *application) deleteListandler(w http.ResponseWriter, r *http.Request)
 	web.WriteJSON(w, resp, http.StatusOK)
 }
 
-func (app *application) createTaskHandler(w http.ResponseWriter, r *http.Request) {
+func (app *application) createTask(w http.ResponseWriter, r *http.Request) {
 	var req ports.CreateTaskRequest
 	if err := web.ReadJSON(r, &req); err != nil {
 		err := fmt.Errorf("'web.ReadJSON' failed: %w", err)
@@ -297,7 +297,7 @@ func (app *application) createTaskHandler(w http.ResponseWriter, r *http.Request
 	web.WriteJSON(w, resp, http.StatusCreated)
 }
 
-func (app *application) updateTaskHandler(w http.ResponseWriter, r *http.Request) {
+func (app *application) updateTask(w http.ResponseWriter, r *http.Request) {
 	v := failures.NewValidator()
 	id := web.Path(r, v, "id")
 	if err := v.Err(); err != nil {
@@ -326,7 +326,7 @@ func (app *application) updateTaskHandler(w http.ResponseWriter, r *http.Request
 	web.WriteJSON(w, resp, http.StatusOK)
 }
 
-func (app *application) getTaskHandler(w http.ResponseWriter, r *http.Request) {
+func (app *application) getTask(w http.ResponseWriter, r *http.Request) {
 	v := failures.NewValidator()
 	id := web.Path(r, v, "id")
 	if err := v.Err(); err != nil {
@@ -349,7 +349,7 @@ func (app *application) getTaskHandler(w http.ResponseWriter, r *http.Request) {
 	web.WriteJSON(w, resp, http.StatusOK)
 }
 
-func (app *application) getTasksHandler(w http.ResponseWriter, r *http.Request) {
+func (app *application) getTasks(w http.ResponseWriter, r *http.Request) {
 	v := failures.NewValidator()
 
 	id := web.Path(r, v, "id")
@@ -385,7 +385,7 @@ func (app *application) getTasksHandler(w http.ResponseWriter, r *http.Request) 
 	web.WriteJSON(w, resp, http.StatusOK)
 }
 
-func (app *application) deleteTaskHandler(w http.ResponseWriter, r *http.Request) {
+func (app *application) deleteTask(w http.ResponseWriter, r *http.Request) {
 	v := failures.NewValidator()
 	id := web.Path(r, v, "id")
 	if err := v.Err(); err != nil {

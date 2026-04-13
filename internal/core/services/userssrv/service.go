@@ -23,15 +23,13 @@ type Config struct {
 
 type service struct {
 	Config
-	usersRepo     ports.UsersRepository
-	tokensService ports.TokensService
+	usersRepo ports.UsersRepository
 }
 
-func New(usersRepo ports.UsersRepository, tokensService ports.TokensService, config Config) ports.UsersService {
+func New(usersRepo ports.UsersRepository, config Config) ports.UsersService {
 	return &service{
-		Config:        config,
-		usersRepo:     usersRepo,
-		tokensService: tokensService,
+		Config:    config,
+		usersRepo: usersRepo,
 	}
 }
 
@@ -49,7 +47,6 @@ func (srv *service) Create(ctx context.Context, req ports.CreateUserRequest) (po
 		return ports.CreateUserResponse{}, fmt.Errorf("'bcrypt.GenerateFromPassword' failed: %w", err)
 	}
 
-	// TODO: combine the two into a transaction
 	user := &domain.User{
 		Name:         req.Name,
 		Email:        req.Email,
@@ -59,14 +56,9 @@ func (srv *service) Create(ctx context.Context, req ports.CreateUserRequest) (po
 		return ports.CreateUserResponse{}, fmt.Errorf("'usersRepo.Create' failed: %w", err)
 	}
 
-	activateResp, err := srv.tokensService.ActivateViaEmail(ctx, *user)
-	if err != nil {
-		return ports.CreateUserResponse{}, fmt.Errorf("'tokensService.ActivateViaEmail' failed: %w", err)
-	}
-
 	resp := ports.CreateUserResponse{
 		User:    user,
-		Message: activateResp.Message,
+		Message: "user was created successfully",
 	}
 	return resp, nil
 }

@@ -104,7 +104,7 @@ func Run() int {
 		NameMaxChars:     cfg.Constants.NameMaxChars,
 		PasswordHashCost: cfg.Constants.PasswordHashCost,
 	}
-	usersService := userssrv.New(usersRepo, tokensService, usersServiceConfig)
+	usersService := userssrv.New(usersRepo, usersServiceConfig)
 
 	listsRepo := listsrepo.NewPostgres(db)
 	listsServiceConfig := listssrv.Config{
