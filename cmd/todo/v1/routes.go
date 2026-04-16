@@ -11,7 +11,8 @@ func composeRoutes(app *application) http.Handler {
 
 	mux.HandleFunc("GET /v1/health", app.health)
 
-	mux.HandleFunc("POST /v1/auth", app.authenticateUser)
+	mux.HandleFunc("POST /v1/auth", app.authenticate)
+	mux.HandleFunc("POST /v1/refresh", app.TokenAuth(app.refresh))
 
 	mux.HandleFunc("POST /v1/users", app.createUser)
 	mux.HandleFunc("GET /v1/users", app.TokenAuth(requireActivatedUser(app.getUser)))

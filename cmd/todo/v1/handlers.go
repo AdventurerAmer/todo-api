@@ -24,7 +24,7 @@ func (app *application) health(w http.ResponseWriter, r *http.Request) {
 	web.WriteJSON(w, resp, http.StatusOK)
 }
 
-func (app *application) authenticateUser(w http.ResponseWriter, r *http.Request) {
+func (app *application) authenticate(w http.ResponseWriter, r *http.Request) {
 	var req ports.CreateAuthTokenRequest
 	if err := web.ReadJSON(r, &req); err != nil {
 		err := fmt.Errorf("'web.ReadJSON' failed: %w", err)
@@ -36,6 +36,20 @@ func (app *application) authenticateUser(w http.ResponseWriter, r *http.Request)
 	defer cancel()
 
 	resp, err := app.tokenAuthService.Create(ctx, req)
+	if err != nil {
+		err := fmt.Errorf("'tokenAuthService.Create' failed: %w", err)
+		web.WriteError(w, err)
+		return
+	}
+
+	web.WriteJSON(w, resp, http.StatusCreated)
+}
+
+func (app *application) refresh(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), app.config.Server.DefaultTimeout)
+	defer cancel()
+
+	resp, err := app.tokenAuthService.Refresh(ctx, mustGetUserFromCtx(ctx))
 	if err != nil {
 		err := fmt.Errorf("'tokenAuthService.Create' failed: %w", err)
 		web.WriteError(w, err)

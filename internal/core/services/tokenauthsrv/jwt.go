@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/AdventurerAmer/todo-api/failures"
+	"github.com/AdventurerAmer/todo-api/internal/core/domain"
 	"github.com/AdventurerAmer/todo-api/internal/core/ports"
 	"github.com/golang-jwt/jwt/v4"
 	"golang.org/x/crypto/bcrypt"
@@ -27,6 +28,21 @@ func NewJWT(usersRepo ports.UsersRepository, cfg JWTConfig) ports.TokenAuthServi
 		JWTConfig: cfg,
 		usersRepo: usersRepo,
 	}
+}
+
+type CustomCalims struct {
+	jwt.RegisteredClaims
+	UserID string `json:"userID"`
+}
+
+func (calims *CustomCalims) Valid() error {
+	if err := calims.RegisteredClaims.Valid(); err != nil {
+		return err
+	}
+	if calims.UserID == "" {
+		return fmt.Errorf("'userID' is empty")
+	}
+	return nil
 }
 
 func (srv *jwtService) Create(ctx context.Context, req ports.CreateAuthTokenRequest) (ports.CreateAuthTokenResponse, error) {
@@ -52,24 +68,31 @@ func (srv *jwtService) Create(ctx context.Context, req ports.CreateAuthTokenRequ
 		return ports.CreateAuthTokenResponse{}, err
 	}
 
-	issuedAt := time.Now()
-	expiresAt := issuedAt.Add(srv.TokenExpiresAfter)
-
-	claims := jwt.MapClaims{
-		"iat":    issuedAt.Unix(),
-		"exp":    expiresAt.Unix(),
-		"userID": user.ID,
-	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signedToken, err := token.SignedString([]byte(srv.Secret))
+	signedToken, expiresAt, err := srv.signToken(user)
 	if err != nil {
-		err := fmt.Errorf("'token.SignedString' failed: %w", err)
+		err := fmt.Errorf("'signToken' failed: %w", err)
 		return ports.CreateAuthTokenResponse{}, err
 	}
 
 	resp := ports.CreateAuthTokenResponse{
-		Token: signedToken,
+		Token:     signedToken,
+		ExpiresAt: expiresAt,
 	}
+	return resp, nil
+}
+
+func (srv *jwtService) Refresh(ctx context.Context, user domain.User) (ports.RefreshAuthTokenResponse, error) {
+	token, expiresAt, err := srv.signToken(user)
+	if err != nil {
+		err := fmt.Errorf("'signToken' failed: %w", err)
+		return ports.RefreshAuthTokenResponse{}, err
+	}
+
+	resp := ports.RefreshAuthTokenResponse{
+		Token:     token,
+		ExpiresAt: expiresAt,
+	}
+
 	return resp, nil
 }
 
@@ -79,11 +102,6 @@ func (srv *jwtService) Check(ctx context.Context, req ports.CheckAuthTokenReques
 	if err := v.Err(); err != nil {
 		err := &failures.AuthenticationError{Reason: "invalid token"}
 		return ports.CheckAuthTokenResponse{}, err
-	}
-
-	type CustomCalims struct {
-		jwt.RegisteredClaims
-		UserID string `json:"userID"`
 	}
 
 	keyFunc := func(t *jwt.Token) (any, error) {
@@ -114,4 +132,23 @@ func (srv *jwtService) Check(ctx context.Context, req ports.CheckAuthTokenReques
 		User: user,
 	}
 	return resp, nil
+}
+
+func (srv *jwtService) signToken(user domain.User) (string, time.Time, error) {
+	issuedAt := time.Now()
+	expiresAt := issuedAt.Add(srv.TokenExpiresAfter)
+	calims := &CustomCalims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			IssuedAt:  jwt.NewNumericDate(issuedAt),
+			ExpiresAt: jwt.NewNumericDate(expiresAt),
+		},
+		UserID: user.ID,
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, calims)
+	signedToken, err := token.SignedString([]byte(srv.Secret))
+	if err != nil {
+		err := fmt.Errorf("'token.SignedString' failed: %w", err)
+		return "", time.Time{}, err
+	}
+	return signedToken, expiresAt, nil
 }
